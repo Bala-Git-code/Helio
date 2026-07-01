@@ -53,8 +53,8 @@ const AppointmentBooking = ({ onClose, onAddAppointment }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="surface-card-strong p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center">
@@ -67,7 +67,7 @@ const AppointmentBooking = ({ onClose, onAddAppointment }) => {
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 hover:bg-emerald-50 rounded-full transition-colors"
           >
             <X className="w-6 h-6 text-gray-600" />
           </button>
@@ -132,7 +132,7 @@ const AppointmentBooking = ({ onClose, onAddAppointment }) => {
                   name="doctorPhone"
                   value={formData.doctorPhone}
                   onChange={handleInputChange}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200"
+                  className="input-field pl-10 pr-4"
                   placeholder="+1 (555) 123-4567"
                   required
                 />
@@ -210,7 +210,7 @@ const AppointmentBooking = ({ onClose, onAddAppointment }) => {
                   value={formData.notes}
                   onChange={handleInputChange}
                   rows={3}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 resize-none"
+                  className="input-field pl-10 pr-4 resize-none"
                   placeholder="Any additional notes or symptoms to discuss..."
                 />
               </div>
@@ -222,13 +222,13 @@ const AppointmentBooking = ({ onClose, onAddAppointment }) => {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+              className="btn-secondary flex-1 px-6 py-3"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 bg-gradient-to-r from-teal-500 to-cyan-500 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
+              className="btn-primary flex-1 px-6 py-3"
             >
               Book Appointment
             </button>

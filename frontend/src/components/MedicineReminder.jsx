@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Mic, MicOff, Pill, Clock } from 'lucide-react';
+import { X, Plus, Mic, MicOff, Pill, Clock, AlertTriangle } from 'lucide-react';
 
 const MedicineReminder = ({ onClose, onAddMedicine }) => {
   const [formData, setFormData] = useState({
@@ -24,7 +24,7 @@ const MedicineReminder = ({ onClose, onAddMedicine }) => {
     for (const ingredient of ingredients) {
       for (const allergy of allergies) {
         if (ingredient.includes(allergy) || allergy.includes(ingredient)) {
-          return `⚠️ WARNING: This medication may contain ${allergy.toUpperCase()}, which you are allergic to!`;
+          return `Warning: this medication may contain ${allergy.toUpperCase()}, which you are allergic to.`;
         }
       }
     }
@@ -148,8 +148,8 @@ const MedicineReminder = ({ onClose, onAddMedicine }) => {
     setAllergyWarning(warning);
   }, [formData.ingredients]);
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="surface-card-strong p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center">
@@ -162,7 +162,7 @@ const MedicineReminder = ({ onClose, onAddMedicine }) => {
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 hover:bg-emerald-50 rounded-full transition-colors"
           >
             <X className="w-6 h-6 text-gray-600" />
           </button>
@@ -179,7 +179,7 @@ const MedicineReminder = ({ onClose, onAddMedicine }) => {
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({...formData, name: e.target.value})}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 pr-12"
+                className="input-field pr-12"
                 placeholder="e.g., Paracetamol"
                 required
               />
@@ -341,13 +341,13 @@ const MedicineReminder = ({ onClose, onAddMedicine }) => {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+              className="btn-secondary flex-1 px-6 py-3"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
+              className="btn-primary flex-1 px-6 py-3"
             >
               Add Reminder
             </button>

@@ -1,5 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { User, Pill, Calendar, MessageCircle, Shield, Clock, MapPin, Phone, Home, Info, Heart, Plus, Bell, FileText, Brain, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  Bell,
+  Brain,
+  Calendar,
+  ChevronRight,
+  Clock,
+  FileText,
+  Heart,
+  Home,
+  Info,
+  MapPin,
+  MessageCircle,
+  Pill,
+  Plus,
+  Shield,
+  Sparkles,
+  Users,
+} from 'lucide-react';
+import SuccessNotification from './SuccessNotification';
 import MedicineReminder from './MedicineReminder';
 import AppointmentBooking from './AppointmentBooking';
 import ProfileModal from './ProfileModal';
@@ -7,18 +27,26 @@ import ChatBot from './ChatBot';
 import AboutModal from './AboutModal';
 import MedicalRecordsModal from './MedicalRecordsModal';
 import AppointmentSummaryModal from './AppointmentSummaryModal';
+import { apiRequest } from '../utils/api';
+import { BrandMark, Button, Card, EmptyState, IconButton, SectionHeader, StatCard } from './design-system';
 
-const Dashboard = ({ 
-  user, 
-  medicines, 
-  appointments, 
+const Dashboard = ({
+  user,
+  medicines,
+  appointments,
   appointmentSummaries,
-  onAddMedicine, 
+  onAddMedicine,
   onDeleteMedicine,
   onAddAppointment,
   onDeleteAppointment,
-  onSaveAppointmentSummary
+  onSaveAppointmentSummary,
+  onGoHome,
+  showSuccessNotification,
+  onNotificationDismiss,
 }) => {
+  const [careData, setCareData] = useState({ profile: {}, medications: [], appointments: [], records: [], notes: [] });
+  const [isLoadingCareData, setIsLoadingCareData] = useState(true);
+  const [careError, setCareError] = useState('');
   const [showMedicineModal, setShowMedicineModal] = useState(false);
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -29,475 +57,307 @@ const Dashboard = ({
   const [selectedAppointment, setSelectedAppointment] = useState(null);
   const [isAlerting, setIsAlerting] = useState(false);
   const [countdown, setCountdown] = useState(10);
+  const [showNotification, setShowNotification] = useState(showSuccessNotification);
 
-  // A more robust way to get today's medicines that handles an undefined medicines prop
+  useEffect(() => {
+    const loadCareData = async () => {
+      try {
+        setIsLoadingCareData(true);
+        const data = await apiRequest('/health/dashboard');
+        setCareData(data);
+      } catch (error) {
+        setCareError(error.message || 'Unable to load your health insights right now.');
+      } finally {
+        setIsLoadingCareData(false);
+      }
+    };
+
+    if (user?.email) loadCareData();
+  }, [user]);
+
+  useEffect(() => {
+    setShowNotification(showSuccessNotification);
+  }, [showSuccessNotification]);
+
+  useEffect(() => {
+    if (!showNotification) return undefined;
+    const timer = setTimeout(() => {
+      setShowNotification(false);
+      onNotificationDismiss?.();
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [showNotification, onNotificationDismiss]);
+
+  useEffect(() => {
+    let timer;
+    if (isAlerting && countdown > 0) {
+      timer = setTimeout(() => setCountdown((value) => value - 1), 1000);
+    } else if (isAlerting && countdown === 0) {
+      setIsAlerting(false);
+      setCountdown(10);
+    }
+    return () => clearTimeout(timer);
+  }, [isAlerting, countdown]);
+
+  if (!user?.email) {
+    return (
+      <main className="page-shell grid place-items-center px-4">
+        <Card className="p-8 text-center">
+          <p className="text-lg font-semibold text-slate-900">Loading your dashboard...</p>
+        </Card>
+      </main>
+    );
+  }
+
+  const effectiveMedicines = (careData.medications?.length ? careData.medications : medicines || []).map((med) => ({ ...med, times: med.times || [] }));
+  const effectiveAppointments = (careData.appointments?.length ? careData.appointments : appointments || []).map((appointment) => ({
+    ...appointment,
+    date: appointment.date || appointment.appointmentDate,
+  }));
+
   const getTodaysMedicines = () => {
     const today = new Date().toDateString();
-    return (medicines || []).filter(med => {
-      const startDate = new Date(med.startDate).toDateString();
-      return startDate <= today;
-    });
+    return effectiveMedicines.filter((med) => new Date(med.startDate || Date.now()).toDateString() <= today);
   };
 
   const getUpcomingMedicine = () => {
     const now = new Date();
     const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    const todaysMeds = getTodaysMedicines();
-    
-    for (const med of todaysMeds) {
+    for (const med of getTodaysMedicines()) {
       for (const time of med.times) {
-        if (time > currentTime) {
-          return { medicine: med, time };
-        }
+        if (time > currentTime) return { medicine: med, time };
       }
     }
     return null;
   };
 
   const getUpcomingAppointment = () => {
-    const now = new Date();
-    const today = now.toDateString();
-    
-    return (appointments || [])
-      .filter(apt => new Date(apt.date).toDateString() >= today)
-      .sort((a, b) => new Date(a.date + ' ' + a.time).getTime() - new Date(b.date + ' ' + b.time).getTime())[0];
+    const today = new Date().toDateString();
+    return effectiveAppointments
+      .filter((apt) => apt.date && new Date(apt.date).toDateString() >= today)
+      .sort((a, b) => new Date(`${a.date} ${a.time}`).getTime() - new Date(`${b.date} ${b.time}`).getTime())[0];
   };
 
+  const todaysMedicines = getTodaysMedicines();
   const upcomingMedicine = getUpcomingMedicine();
   const upcomingAppointment = getUpcomingAppointment();
-
-  // Emergency Alert Logic
-  const handleSendAlert = () => {
-    setIsAlerting(true);
-    setCountdown(10);
-  };
-
-  const handleCancelAlert = () => {
-    setIsAlerting(false);
-    setCountdown(10);
-  };
-
-  useEffect(() => {
-    let timer;
-    if (isAlerting && countdown > 0) {
-      timer = setTimeout(() => {
-        setCountdown(countdown - 1);
-      }, 1000);
-    } else if (isAlerting && countdown === 0) {
-      // Logic to actually send the alert here
-      console.log('Emergency alert sent!');
-      setIsAlerting(false);
-      // You can add a success message or other feedback here
-    }
-
-    return () => clearTimeout(timer);
-  }, [isAlerting, countdown]);
+  const displayName = user.name || user.email.split('@')[0];
+  const firstName = displayName.split(' ')[0];
+  const firstLetter = displayName.charAt(0).toUpperCase();
+  const healthScore = careData.profile?.healthScore || 84;
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
-        {/* Integrated Navigation Header */}
-        <div className="bg-white/70 backdrop-blur-xl border-b border-emerald-100/50 sticky top-0 z-40">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex justify-between items-center">
-              {/* Logo and Welcome */}
-              <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-3">
-                  <div className="bg-gradient-to-br from-emerald-600 to-teal-600 p-2.5 rounded-xl shadow-lg">
-                    <Heart className="w-7 h-7 text-white" />
-                  </div>
-                  <div>
-                    <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
-                      Helio
-                    </h1>
-                    <p className="text-sm text-gray-600">Smart Health Assistant</p>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Navigation and Profile */}
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={() => {}}
-                  className="flex items-center space-x-2 px-4 py-2 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-600 transition-all duration-200 font-medium"
-                >
-                  <Home className="w-5 h-5" />
-                  <span className="hidden sm:inline">Home</span>
-                </button>
-                <button
-                  onClick={() => setShowMedicalRecords(true)}
-                  className="flex items-center space-x-2 px-4 py-2 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-600 transition-all duration-200 font-medium"
-                >
-                  <FileText className="w-5 h-5" />
-                  <span className="hidden sm:inline">Records</span>
-                </button>
-                <button
-                  onClick={() => setShowAboutModal(true)}
-                  className="flex items-center space-x-2 px-4 py-2 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-600 transition-all duration-200 font-medium"
-                >
-                  <Info className="w-5 h-5" />
-                  <span className="hidden sm:inline">About</span>
-                </button>
-                <button
-                  onClick={() => setShowProfileModal(true)}
-                  className="w-10 h-10 bg-gradient-to-br from-emerald-600 to-teal-600 rounded-full flex items-center justify-center text-white shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 font-semibold"
-                >
-                  {user.name.charAt(0).toUpperCase()}
-                </button>
-              </div>
+      <SuccessNotification show={showNotification} message={`Welcome to Helio, ${firstName}!`} />
+
+      <main className="page-shell">
+        <header className="nav-glass">
+          <div className="content-shell flex items-center justify-between gap-4 py-4">
+            <BrandMark subtitle="Patient care command center" />
+            <div className="flex items-center gap-2">
+              <IconButton label="Home" onClick={onGoHome}><Home className="h-5 w-5" /></IconButton>
+              <IconButton label="Medical records" onClick={() => setShowMedicalRecords(true)}><FileText className="h-5 w-5" /></IconButton>
+              <IconButton label="About Helio" onClick={() => setShowAboutModal(true)}><Info className="h-5 w-5" /></IconButton>
+              <button onClick={() => setShowProfileModal(true)} className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 font-semibold text-white shadow-[var(--shadow-glow)]" aria-label="Open profile">
+                {firstLetter}
+              </button>
             </div>
           </div>
-        </div>
+        </header>
 
-        {/* Welcome Section */}
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold text-gray-800 mb-2">
-              Welcome back, {user.name.split(' ')[0]}! 👋
-            </h2>
-            <p className="text-lg text-gray-600">How are you feeling today?</p>
-          </div>
-        </div>
+        <div className="content-shell py-6 sm:py-8">
+          <Card className="overflow-hidden p-6 sm:p-8">
+            <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-end">
+              <div>
+                <p className="section-kicker mb-4">
+                  <Sparkles className="mr-2 h-3.5 w-3.5" />
+                  Personalized care concierge
+                </p>
+                <h1 className="text-balance text-3xl font-semibold leading-tight text-slate-950 sm:text-5xl">
+                  Welcome back, {firstName}. Your care plan is steady today.
+                </h1>
+                <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">
+                  {careError || 'Your medications, upcoming visits, care records, and AI insights are organized for a calmer day.'}
+                </p>
+              </div>
+              <div className="rounded-[var(--radius-xl)] bg-slate-950 p-5 text-white">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Health score</p>
+                <div className="mt-2 flex items-end gap-2">
+                  <span className="text-5xl font-semibold">{healthScore}</span>
+                  <span className="pb-2 text-lg text-slate-300">%</span>
+                </div>
+                <div className="mt-4 h-2 rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-sky-400" style={{ width: `${Math.min(healthScore, 100)}%` }} />
+                </div>
+                <p className="mt-3 text-sm text-slate-300">{isLoadingCareData ? 'Refreshing your care snapshot...' : 'Consistency is trending up this week.'}</p>
+              </div>
+            </div>
+          </Card>
 
-        {/* Main Dashboard Content */}
-        <div className="max-w-7xl mx-auto px-6 pb-6 space-y-8">
-          {/* Quick Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg border border-white/20 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Today's Medicines</p>
-                  <p className="text-3xl font-bold text-emerald-600">{getTodaysMedicines().length}</p>
-                </div>
-                <div className="bg-emerald-100 p-3 rounded-xl">
-                  <Pill className="w-6 h-6 text-emerald-600" />
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg border border-white/20 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Appointments</p>
-                  <p className="text-3xl font-bold text-teal-600">{appointments ? appointments.length : 0}</p>
-                </div>
-                <div className="bg-teal-100 p-3 rounded-xl">
-                  <Calendar className="w-6 h-6 text-teal-600" />
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg border border-white/20 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Next Reminder</p>
-                  <p className="text-lg font-semibold text-cyan-600">
-                    {upcomingMedicine ? upcomingMedicine.time : 'None'}
-                  </p>
-                </div>
-                <div className="bg-cyan-100 p-3 rounded-xl">
-                  <Bell className="w-6 h-6 text-cyan-600" />
-                </div>
-              </div>
-            </div>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <StatCard icon={Pill} label="Today's medicines" value={todaysMedicines.length} detail={upcomingMedicine ? `Next at ${upcomingMedicine.time}` : 'No dose remaining today'} />
+            <StatCard icon={Calendar} label="Appointments" value={effectiveAppointments.length} detail={upcomingAppointment ? `${upcomingAppointment.doctorName} is next` : 'No upcoming reminder'} tone="appointment" />
+            <StatCard icon={Bell} label="Next reminder" value={upcomingMedicine?.time || upcomingAppointment?.time || 'Clear'} detail="Prioritized from your care schedule" tone="ai" />
           </div>
 
-          {/* Medicine Reminders Section */}
-          <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-xl border border-white/20 overflow-hidden">
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-8 py-6">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center text-white">
-                  <Pill className="w-8 h-8 mr-3" />
-                  <div>
-                    <h2 className="text-2xl font-bold">Medicine Reminders</h2>
-                    <p className="text-emerald-100">Manage your daily medications</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowMedicineModal(true)}
-                  className="bg-white/20 backdrop-blur-sm text-white px-6 py-3 rounded-xl font-semibold hover:bg-white/30 transition-all duration-300 flex items-center space-x-2"
-                >
-                  <Plus className="w-5 h-5" />
-                  <span>Add Medicine</span>
-                </button>
+          <div className="mt-8 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+            <Card className="overflow-hidden">
+              <div className="flex flex-col gap-4 border-b border-emerald-100 bg-emerald-50/70 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <SectionHeader title="Medicine reminders" description="Daily doses, timing, and allergy-aware medication context." />
+                <Button onClick={() => setShowMedicineModal(true)}><Plus className="h-5 w-5" /> Add medicine</Button>
               </div>
-            </div>
-            
-            <div className="p-8">
-              {getTodaysMedicines().length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {getTodaysMedicines().map((medicine) => (
-                    <div key={medicine.id} className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-6 border border-emerald-200 hover:shadow-lg transition-all duration-300">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="bg-emerald-600 p-2 rounded-lg">
-                          <Pill className="w-5 h-5 text-white" />
-                        </div>
-                        <button
-                          onClick={() => onDeleteMedicine(medicine.id)}
-                          className="text-red-500 hover:text-red-700 transition-colors text-xl font-bold"
-                        >
-                          ×
-                        </button>
-                      </div>
-                      <h4 className="font-bold text-gray-800 text-lg mb-2">{medicine.name}</h4>
-                      <p className="text-gray-600 text-sm mb-3">{medicine.dosage} • {medicine.frequency}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {medicine.times.map((time, index) => (
-                          <span key={index} className="bg-emerald-600 text-white px-3 py-1 rounded-full text-xs font-medium">
-                            {time}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-16">
-                  <div className="bg-gray-100 p-6 rounded-full w-24 h-24 mx-auto mb-6 flex items-center justify-center">
-                    <Pill className="w-12 h-12 text-gray-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-2">No medicines scheduled</h3>
-                  <p className="text-gray-600 mb-6">Start managing your health by adding your first medicine reminder</p>
-                  <button
-                    onClick={() => setShowMedicineModal(true)}
-                    className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-8 py-3 rounded-xl font-semibold hover:shadow-lg transform hover:scale-105 transition-all duration-300"
-                  >
-                    Add Your First Medicine
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Appointments Section */}
-          <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-xl border border-white/20 overflow-hidden">
-            <div className="bg-gradient-to-r from-teal-500 to-cyan-500 px-8 py-6">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center text-white">
-                  <Calendar className="w-8 h-8 mr-3" />
-                  <div>
-                    <h2 className="text-2xl font-bold">Appointments</h2>
-                    <p className="text-teal-100">Schedule and manage doctor visits</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowAppointmentModal(true)}
-                  className="bg-white/20 backdrop-blur-sm text-white px-6 py-3 rounded-xl font-semibold hover:bg-white/30 transition-all duration-300 flex items-center space-x-2"
-                >
-                  <Plus className="w-5 h-5" />
-                  <span>Book Appointment</span>
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-8">
-              {appointments.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {appointments.map((appointment) => (
-                    <div key={appointment.id} className="bg-gradient-to-br from-teal-50 to-cyan-50 rounded-2xl p-6 border border-teal-200 hover:shadow-lg transition-all duration-300">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="bg-teal-600 p-2 rounded-lg">
-                          <Calendar className="w-5 h-5 text-white" />
-                        </div>
-                        <button
-                          onClick={() => onDeleteAppointment(appointment.id)}
-                          className="text-red-500 hover:text-red-700 transition-colors text-xl font-bold"
-                        >
-                          ×
-                        </button>
-                      </div>
-                      <h4 className="font-bold text-gray-800 text-lg mb-1">{appointment.doctorName}</h4>
-                      <p className="text-teal-600 font-medium mb-4">{appointment.specialty}</p>
-                      <div className="space-y-2 text-sm text-gray-600">
-                        <div className="flex items-center">
-                          <Clock className="w-4 h-4 mr-2" />
-                          {new Date(appointment.date).toLocaleDateString()} at {appointment.time}
-                        </div>
-                        <div className="flex items-center">
-                          <MapPin className="w-4 h-4 mr-2" />
-                          {appointment.clinicAddress}
-                        </div>
-                        <div className="flex items-center">
-                          <Phone className="w-4 h-4 mr-2" />
-                          {appointment.doctorPhone}
-                        </div>
-                        {appointment.notes && (
-                          <div className="mt-3 p-3 bg-white/60 rounded-lg">
-                            <p className="text-xs text-gray-700">{appointment.notes}</p>
+              <div className="p-5 sm:p-6">
+                {todaysMedicines.length ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {todaysMedicines.map((medicine) => (
+                      <article key={medicine._id || medicine.id} className="rounded-[var(--radius-lg)] border border-emerald-100 bg-white/80 p-5 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-600 text-white">
+                            <Pill className="h-5 w-5" />
                           </div>
-                        )}
-                      </div>
-                      <div className="mt-3 flex space-x-2">
-                        <button
-                          onClick={() => {
-                            setSelectedAppointment(appointment);
-                            setShowAppointmentSummary(true);
-                          }}
-                          className="flex items-center space-x-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-200 transition-colors"
+                          <IconButton label={`Delete ${medicine.name}`} onClick={() => onDeleteMedicine(medicine._id || medicine.id)} className="h-9 w-9 rounded-xl">
+                            <AlertTriangle className="h-4 w-4 text-red-600" />
+                          </IconButton>
+                        </div>
+                        <h3 className="mt-4 text-lg font-semibold text-slate-950">{medicine.name}</h3>
+                        <p className="mt-1 text-sm text-slate-600">{medicine.dosage} • {medicine.frequency}</p>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {medicine.times.map((time) => <span key={time} className="chip bg-emerald-50 text-emerald-800">{time}</span>)}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={Pill}
+                    title="No medicines scheduled"
+                    description="Add your first medicine reminder to create a daily rhythm Helio can protect."
+                    action={<Button onClick={() => setShowMedicineModal(true)}>Add your first medicine</Button>}
+                  />
+                )}
+              </div>
+            </Card>
+
+            <Card className="overflow-hidden">
+              <div className="flex flex-col gap-4 border-b border-sky-100 bg-sky-50/70 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <SectionHeader title="Appointment reminders" description="Upcoming visits and preparation notes." />
+                <Button onClick={() => setShowAppointmentModal(true)}><Plus className="h-5 w-5" /> Set reminder</Button>
+              </div>
+              <div className="p-5 sm:p-6">
+                {effectiveAppointments.length ? (
+                  <div className="space-y-4">
+                    {effectiveAppointments.map((appointment) => (
+                      <article key={appointment._id || appointment.id} className="rounded-[var(--radius-lg)] border border-sky-100 bg-white/80 p-5 shadow-sm">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <h3 className="text-lg font-semibold text-slate-950">{appointment.doctorName}</h3>
+                            <p className="text-sm font-medium text-sky-700">{appointment.specialty}</p>
+                          </div>
+                          <IconButton label={`Delete appointment with ${appointment.doctorName}`} onClick={() => onDeleteAppointment(appointment._id || appointment.id)} className="h-9 w-9 rounded-xl">
+                            <AlertTriangle className="h-4 w-4 text-red-600" />
+                          </IconButton>
+                        </div>
+                        <div className="mt-4 space-y-2 text-sm text-slate-600">
+                          <p className="flex items-center gap-2"><Clock className="h-4 w-4" />{new Date(appointment.date).toLocaleDateString()} at {appointment.time}</p>
+                          <p className="flex items-center gap-2"><MapPin className="h-4 w-4" />{appointment.clinicAddress}</p>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="mt-4"
+                          onClick={() => { setSelectedAppointment(appointment); setShowAppointmentSummary(true); }}
                         >
-                          <Brain className="w-3 h-3" />
-                          <span>AI Summary</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-16">
-                  <div className="bg-gray-100 p-6 rounded-full w-24 h-24 mx-auto mb-6 flex items-center justify-center">
-                    <Calendar className="w-12 h-12 text-gray-400" />
+                          <Brain className="h-4 w-4" />
+                          AI summary
+                        </Button>
+                      </article>
+                    ))}
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-2">No appointments scheduled</h3>
-                  <p className="text-gray-600 mb-6">Book your first appointment with a healthcare provider</p>
-                  <button
-                    onClick={() => setShowAppointmentModal(true)}
-                    className="bg-gradient-to-r from-teal-500 to-cyan-500 text-white px-8 py-3 rounded-xl font-semibold hover:shadow-lg transform hover:scale-105 transition-all duration-300"
-                  >
-                    Book Your First Appointment
-                  </button>
-                </div>
-              )}
-            </div>
+                ) : (
+                  <EmptyState
+                    icon={Calendar}
+                    title="No appointments yet"
+                    description="Create a reminder for an upcoming visit so Helio can help you prepare."
+                    action={<Button onClick={() => setShowAppointmentModal(true)}>Set first reminder</Button>}
+                  />
+                )}
+              </div>
+            </Card>
           </div>
 
-          {/* Upcoming Section */}
-          {(upcomingMedicine || upcomingAppointment) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {upcomingMedicine && (
-                <div className="bg-gradient-to-br from-emerald-500 to-teal-500 rounded-3xl shadow-xl p-8 text-white">
-                  <div className="flex items-center mb-6">
-                    <div className="bg-white/20 p-3 rounded-xl mr-4">
-                      <Clock className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold">Next Medicine</h3>
-                      <p className="text-emerald-100">Don't forget your medication</p>
-                    </div>
-                  </div>
-                  <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-6">
-                    <div className="font-bold text-2xl mb-2">{upcomingMedicine.medicine.name}</div>
-                    <div className="text-emerald-100 mb-3">{upcomingMedicine.medicine.dosage}</div>
-                    <div className="text-3xl font-bold">at {upcomingMedicine.time}</div>
-                  </div>
+          <div className="mt-8 grid gap-6 md:grid-cols-2">
+            <Card className="p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-emerald-700">Care timeline</p>
+                  <h2 className="mt-1 text-xl font-semibold text-slate-950">Recovery and follow-up</h2>
                 </div>
-              )}
+                <Activity className="h-6 w-6 text-emerald-600" />
+              </div>
+              <div className="mt-5 space-y-3">
+                {careData.records?.slice(0, 3).length ? careData.records.slice(0, 3).map((record) => (
+                  <div key={record._id} className="flex items-start justify-between gap-3 rounded-2xl bg-white/80 px-4 py-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">{record.title}</p>
+                      <p className="text-sm text-slate-600">{record.summary}</p>
+                    </div>
+                    <ChevronRight className="mt-1 h-4 w-4 text-slate-400" />
+                  </div>
+                )) : <p className="text-sm text-slate-600">No health timeline entries yet.</p>}
+              </div>
+            </Card>
 
-              {upcomingAppointment && (
-                <div className="bg-gradient-to-br from-teal-500 to-cyan-500 rounded-3xl shadow-xl p-8 text-white">
-                  <div className="flex items-center mb-6">
-                    <div className="bg-white/20 p-3 rounded-xl mr-4">
-                      <Calendar className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold">Next Appointment</h3>
-                      <p className="text-teal-100">Upcoming doctor visit</p>
-                    </div>
-                  </div>
-                  <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-6">
-                    <div className="font-bold text-2xl mb-2">{upcomingAppointment.doctorName}</div>
-                    <div className="text-teal-100 mb-3">{upcomingAppointment.specialty}</div>
-                    <div className="text-xl font-bold">
-                      {new Date(upcomingAppointment.date).toLocaleDateString()} at {upcomingAppointment.time}
-                    </div>
-                  </div>
+            <Card className="p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-sky-700">Care team</p>
+                  <h2 className="mt-1 text-xl font-semibold text-slate-950">Your support circle</h2>
                 </div>
-              )}
-            </div>
-          )}
+                <Users className="h-6 w-6 text-sky-600" />
+              </div>
+              <div className="mt-5 space-y-3">
+                {careData.profile?.familyMembers?.length ? careData.profile.familyMembers.map((member, index) => (
+                  <div key={`${member.name}-${index}`} className="rounded-2xl bg-white/80 px-4 py-3 text-sm text-slate-700">
+                    {member.name} • {member.relationship}
+                  </div>
+                )) : <p className="text-sm text-slate-600">Add family contacts for coordinated care.</p>}
+              </div>
+            </Card>
+          </div>
         </div>
-      </div>
+      </main>
 
-      {/* Conditional Rendering for Alert/Countdown */}
       {isAlerting ? (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-          <div className="bg-white rounded-3xl shadow-2xl p-10 text-center transform scale-105 transition-transform duration-300">
-            <div className="text-6xl font-bold text-red-600 mb-4 animate-pulse">{countdown}</div>
-            <h3 className="text-2xl font-semibold text-gray-800 mb-6">Emergency Alert Sending...</h3>
-            <p className="text-gray-600 mb-8">Click cancel to stop the alert.</p>
-            <button
-              onClick={handleCancelAlert}
-              className="bg-gray-200 text-gray-700 font-bold py-3 px-8 rounded-full hover:bg-gray-300 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+          <Card className="max-w-sm p-8 text-center">
+            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-red-50 text-5xl font-semibold text-red-600">{countdown}</div>
+            <h2 className="mt-5 text-2xl font-semibold text-slate-950">Emergency alert sending</h2>
+            <p className="mt-2 text-sm text-slate-600">Cancel if this was accidental.</p>
+            <Button variant="secondary" className="mt-6 w-full" onClick={() => { setIsAlerting(false); setCountdown(10); }}>Cancel alert</Button>
+          </Card>
         </div>
       ) : (
-        <>
-          {/* Emergency SOS Button */}
-          <button
-            onClick={handleSendAlert}
-            className="fixed bottom-24 right-6 bg-red-600 text-white p-4 rounded-full shadow-2xl hover:shadow-3xl transform hover:scale-110 transition-all duration-300 z-50"
-          >
-            <AlertTriangle className="w-6 h-6" />
-          </button>
-
-          {/* AI Chat Button */}
-          <button
-            onClick={() => setShowChatBot(true)}
-            className="fixed bottom-6 right-6 bg-gradient-to-br from-emerald-600 to-teal-600 text-white p-4 rounded-full shadow-2xl hover:shadow-3xl transform hover:scale-110 transition-all duration-300 z-50"
-          >
-            <MessageCircle className="w-6 h-6" />
-          </button>
-        </>
+        <div className="fixed bottom-5 right-5 z-40 flex flex-col gap-3">
+          <IconButton label="Start emergency alert" onClick={() => { setIsAlerting(true); setCountdown(10); }} className="border-red-200 bg-red-600 text-white hover:bg-red-700 hover:text-white">
+            <Shield className="h-5 w-5" />
+          </IconButton>
+          <IconButton label="Open AI assistant" onClick={() => setShowChatBot(true)} className="bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white">
+            <MessageCircle className="h-5 w-5" />
+          </IconButton>
+        </div>
       )}
 
-      {/* Modals */}
-      {showMedicineModal && (
-        <MedicineReminder 
-          onClose={() => setShowMedicineModal(false)} 
-          onAddMedicine={onAddMedicine}
-        />
+      {showMedicineModal && <MedicineReminder onClose={() => setShowMedicineModal(false)} onAddMedicine={onAddMedicine} />}
+      {showAppointmentModal && <AppointmentBooking onClose={() => setShowAppointmentModal(false)} onAddAppointment={onAddAppointment} />}
+      {showProfileModal && <ProfileModal user={user} onClose={() => setShowProfileModal(false)} />}
+      {showChatBot && <ChatBot onClose={() => setShowChatBot(false)} user={user} medicines={medicines} appointments={appointments} />}
+      {showAboutModal && <AboutModal onClose={() => setShowAboutModal(false)} />}
+      {showMedicalRecords && <MedicalRecordsModal onClose={() => setShowMedicalRecords(false)} user={user} />}
+      {showAppointmentSummary && selectedAppointment && (
+        <AppointmentSummaryModal onClose={() => { setShowAppointmentSummary(false); setSelectedAppointment(null); }} appointment={selectedAppointment} onSaveSummary={onSaveAppointmentSummary} />
       )}
-
-      {showAppointmentModal && (
-        <AppointmentBooking 
-          onClose={() => setShowAppointmentModal(false)} 
-          onAddAppointment={onAddAppointment}
-        />
-      )}
-
-      {showProfileModal && (
-        <ProfileModal 
-          user={user} 
-          onClose={() => setShowProfileModal(false)} 
-        />
-      )}
-
-      {showChatBot && (
-        <ChatBot 
-          onClose={() => setShowChatBot(false)}
-          user={user}
-          medicines={medicines}
-          appointments={appointments}
-        />
-      )}
-
-      {showAboutModal && (
-        <AboutModal 
-          onClose={() => setShowAboutModal(false)} 
-        />
-      )}
-
-      {showMedicalRecords && (
-        <MedicalRecordsModal 
-          onClose={() => setShowMedicalRecords(false)}
-          user={user}
-        />
-      )}
-
-      {showAppointmentSummary && selectedAppointment && (
-        <AppointmentSummaryModal 
-          onClose={() => {
-            setShowAppointmentSummary(false);
-            setSelectedAppointment(null);
-          }}
-          appointment={selectedAppointment}
-          onSaveSummary={onSaveAppointmentSummary}
-        />
-      )}
-    </>
-  );
+    </>
+  );
 };
- 
+
 export default Dashboard;

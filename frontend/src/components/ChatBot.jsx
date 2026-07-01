@@ -45,7 +45,10 @@ const ChatBot = ({ onClose, user, medicines, appointments = [] }) => {
     }
     
     if (message.includes('emergency') || message.includes('sos')) {
-      return `Your emergency contact is ${user.emergencyContact.name} (${user.emergencyContact.relationship}) at ${user.emergencyContact.phone}. In case of emergency, you can use the SOS button on your dashboard.`;
+      if (user.emergencyContact?.name) {
+        return `Your emergency contact is ${user.emergencyContact.name} (${user.emergencyContact.relationship}) at ${user.emergencyContact.phone}. In case of emergency, you can use the SOS button on your dashboard.`;
+      }
+      return "I do not see an emergency contact in your profile yet. You can still use the SOS button on your dashboard, and it is a good idea to add an emergency contact in your profile.";
     }
     
     if (message.includes('health tip') || message.includes('tip')) {
@@ -134,7 +137,7 @@ const ChatBot = ({ onClose, user, medicines, appointments = [] }) => {
     }
   };
 
-  const handleKeyPress = (e) => {
+  const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -219,7 +222,7 @@ const ChatBot = ({ onClose, user, medicines, appointments = [] }) => {
               <textarea
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyDown}
                 placeholder="Ask me about your medicines, health tips, or any health questions..."
                 rows={1}
                 className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200 resize-none"

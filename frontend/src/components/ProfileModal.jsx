@@ -71,8 +71,8 @@ const ProfileModal = ({ user, onClose, onUpdateProfile }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 max-w-2xl w-full max-h-[85vh] overflow-hidden">
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="surface-card-strong max-w-2xl w-full max-h-[85vh] overflow-hidden">
         
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-gray-200 relative">

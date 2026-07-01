@@ -1,135 +1,145 @@
 import React from 'react';
-import { Heart, Shield, Stethoscope, Pill, Calendar, MessageCircle } from 'lucide-react';
+import {
+  Activity,
+  ArrowRight,
+  Bell,
+  Calendar,
+  CheckCircle2,
+  FileText,
+  HeartPulse,
+  MessageCircle,
+  Pill,
+  ShieldCheck,
+  Sparkles,
+  Stethoscope,
+  Users,
+} from 'lucide-react';
+import { BrandMark, Button, Card, SectionHeader, StatCard } from './design-system';
+
+const trustSignals = [
+  { icon: ShieldCheck, label: 'Protected health routines' },
+  { icon: Stethoscope, label: 'Doctor-connected context' },
+  { icon: Users, label: 'Family care coordination' },
+];
+
+const careFeatures = [
+  { icon: Pill, title: 'Medicine rhythm', text: 'Dose schedules, allergy checks, and voice input for daily adherence.' },
+  { icon: Calendar, title: 'Appointment clarity', text: 'Visits, preparation notes, and follow-up summaries in one calm timeline.' },
+  { icon: FileText, title: 'Record vault', text: 'A dedicated place for labs, imaging, prescriptions, and care documents.' },
+  { icon: MessageCircle, title: 'AI companion', text: 'Plain-language guidance for routines, reminders, and care questions.' },
+];
 
 const WelcomePage = ({ onGetStarted }) => {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-20 left-20 w-72 h-72 bg-gradient-to-br from-emerald-400/20 to-teal-400/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-20 right-20 w-96 h-96 bg-gradient-to-br from-teal-400/20 to-cyan-400/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-gradient-to-br from-cyan-400/20 to-emerald-400/20 rounded-full blur-3xl animate-pulse delay-500"></div>
-      </div>
+    <main className="page-shell overflow-hidden">
+      <section className="relative min-h-[92vh]">
+        <img
+          src="/helio-care-consult.png"
+          alt="A clinician and patient reviewing a digital health dashboard together in a bright consultation room"
+          className="absolute inset-0 h-full w-full object-cover object-[58%_center]"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(246,251,250,0.98)_0%,rgba(246,251,250,0.92)_32%,rgba(246,251,250,0.45)_64%,rgba(246,251,250,0.08)_100%)]" />
+        <div className="content-shell relative z-10 flex min-h-[92vh] flex-col justify-between py-5 sm:py-7">
+          <nav className="flex items-center justify-between gap-4" aria-label="Landing">
+            <BrandMark subtitle="Premium healthcare companion" />
+            <Button variant="secondary" size="sm" onClick={onGetStarted}>
+              Enter Helio
+            </Button>
+          </nav>
 
-      <div className="max-w-4xl mx-auto text-center relative z-10">
-        {/* Logo and Brand */}
-        <div className="mb-8 flex items-center justify-center">
-          <div className="bg-gradient-to-br from-emerald-600 to-teal-600 p-4 rounded-2xl shadow-lg mb-4">
-            <Heart className="w-12 h-12 text-white" />
+          <div className="grid gap-10 py-10 lg:grid-cols-[minmax(0,0.95fr)_minmax(420px,0.7fr)] lg:items-end">
+            <div className="max-w-3xl animate-rise-in">
+              <p className="section-kicker mb-5">Patient portal + doctor portal + AI care assistant</p>
+              <h1 className="text-balance text-5xl font-semibold leading-[1.02] text-slate-950 sm:text-6xl lg:text-7xl">
+                Helio keeps care organized when health feels personal.
+              </h1>
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-700 sm:text-xl">
+                Manage medicines, appointments, records, emergency contacts, and doctor context in a protected workspace designed to feel calm, clear, and deeply human.
+              </p>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Button size="lg" onClick={onGetStarted}>
+                  Start your care space
+                  <ArrowRight className="h-5 w-5" aria-hidden="true" />
+                </Button>
+                <Button variant="secondary" size="lg">
+                  <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+                  Private by design
+                </Button>
+              </div>
+              <div className="mt-8 flex flex-wrap gap-3">
+                {trustSignals.map(({ icon: Icon, label }) => (
+                  <span key={label} className="chip">
+                    <Icon className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <Card className="hidden p-4 shadow-[var(--shadow-elevated)] lg:block">
+              <div className="rounded-[1.25rem] bg-slate-950 p-5 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Today</p>
+                    <h2 className="mt-1 text-2xl font-semibold">Care command center</h2>
+                  </div>
+                  <HeartPulse className="h-8 w-8 text-emerald-300" aria-hidden="true" />
+                </div>
+                <div className="mt-6 grid grid-cols-2 gap-3">
+                  {[
+                    ['84%', 'Health score'],
+                    ['3', 'Medicines'],
+                    ['10:30', 'Next dose'],
+                    ['2', 'Care notes'],
+                  ].map(([value, label]) => (
+                    <div key={label} className="rounded-2xl border border-white/10 bg-white/8 p-4">
+                      <div className="text-2xl font-semibold">{value}</div>
+                      <div className="mt-1 text-xs text-slate-300">{label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-5 rounded-2xl bg-white p-4 text-slate-900">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">AI insight</p>
+                      <p className="mt-1 text-sm text-slate-600">Your morning dose and cardiology follow-up are aligned.</p>
+                    </div>
+                    <Sparkles className="h-5 w-5 text-violet-600" aria-hidden="true" />
+                  </div>
+                </div>
+              </div>
+            </Card>
           </div>
         </div>
+      </section>
 
-        <div className="mb-6">
-          <h1 className="text-6xl md:text-7xl font-bold bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent mb-4 animate-fade-in">
-            Helio
-          </h1>
-          <div className="h-2 w-32 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full mx-auto mb-8"></div>
+      <section className="content-shell -mt-10 pb-10">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard icon={Bell} label="Reminder readiness" value="98%" detail="Designed around missed-dose prevention" />
+          <StatCard icon={Activity} label="Care timeline" value="24/7" detail="Records and routines stay available" tone="appointment" />
+          <StatCard icon={CheckCircle2} label="Protected actions" value="1 tap" detail="Emergency and care-team access" tone="emergency" />
         </div>
+      </section>
 
-        {/* Main Headline with Animation */}
-        <h2 className="text-4xl md:text-5xl font-bold text-gray-800 mb-6 animate-slide-up">
-          Your Personal Smart
-          <span className="block bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent animate-fade-in-delay">
-            Health Assistant
-          </span>
-        </h2>
-
-        {/* Introductory Text */}
-        <p className="text-xl md:text-2xl text-gray-600 mb-12 max-w-3xl mx-auto leading-relaxed animate-slide-up-delay">
-          We're here to help you manage your medicines, remember your doctor visits, 
-          and keep you safe in emergencies.
-        </p>
-
-        {/* Feature Icons */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12 max-w-2xl mx-auto">
-          <div className="flex flex-col items-center group">
-            <div className="bg-white p-4 rounded-xl shadow-lg group-hover:shadow-xl transition-all duration-300 mb-3 group-hover:scale-110">
-              <Pill className="w-8 h-8 text-emerald-600" />
-            </div>
-            <span className="text-sm font-medium text-gray-700">Medicine Reminders</span>
-          </div>
-          <div className="flex flex-col items-center group">
-            <div className="bg-white p-4 rounded-xl shadow-lg group-hover:shadow-xl transition-all duration-300 mb-3 group-hover:scale-110">
-              <Calendar className="w-8 h-8 text-teal-600" />
-            </div>
-            <span className="text-sm font-medium text-gray-700">Appointments</span>
-          </div>
-          <div className="flex flex-col items-center group">
-            <div className="bg-white p-4 rounded-xl shadow-lg group-hover:shadow-xl transition-all duration-300 mb-3 group-hover:scale-110">
-              <MessageCircle className="w-8 h-8 text-cyan-600" />
-            </div>
-            <span className="text-sm font-medium text-gray-700">AI Assistant</span>
-          </div>
-          <div className="flex flex-col items-center group">
-            <div className="bg-white p-4 rounded-xl shadow-lg group-hover:shadow-xl transition-all duration-300 mb-3 group-hover:scale-110">
-              <Shield className="w-8 h-8 text-red-500" />
-            </div>
-            <span className="text-sm font-medium text-gray-700">Emergency SOS</span>
-          </div>
+      <section className="content-shell pb-16">
+        <SectionHeader
+          eyebrow="Reusable care system"
+          title="A healthcare interface with a gentle hierarchy"
+          description="Each feature has its own signal while sharing one visual language: soft surfaces, clear actions, readable type, and accessible focus states."
+        />
+        <div className="mt-7 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {careFeatures.map(({ icon: Icon, title, text }) => (
+            <Card key={title} interactive className="p-5">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-700">
+                <Icon className="h-6 w-6" aria-hidden="true" />
+              </div>
+              <h3 className="mt-5 text-lg font-semibold text-slate-950">{title}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{text}</p>
+            </Card>
+          ))}
         </div>
-
-        {/* Get Started Button */}
-        <button 
-          onClick={onGetStarted}
-          className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-12 py-4 rounded-2xl text-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 animate-bounce-gentle"
-        >
-          Get Started
-        </button>
-
-        {/* Trust Indicators */}
-        <div className="mt-12 flex items-center justify-center space-x-8 text-gray-500">
-          <div className="flex items-center space-x-2">
-            <Shield className="w-5 h-5" />
-            <span className="text-sm">Secure & Private</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Stethoscope className="w-5 h-5" />
-            <span className="text-sm">Healthcare Focused</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Heart className="w-5 h-5" />
-            <span className="text-sm">Always Available</span>
-          </div>
-        </div>
-      </div>
-
-      <style>{`
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        
-        @keyframes slide-up {
-          from { opacity: 0; transform: translateY(30px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        
-        @keyframes bounce-gentle {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-5px); }
-        }
-        
-        .animate-fade-in {
-          animation: fade-in 1s ease-out;
-        }
-        
-        .animate-fade-in-delay {
-          animation: fade-in 1s ease-out 0.3s both;
-        }
-        
-        .animate-slide-up {
-          animation: slide-up 1s ease-out 0.5s both;
-        }
-        
-        .animate-slide-up-delay {
-          animation: slide-up 1s ease-out 0.7s both;
-        }
-        
-        .animate-bounce-gentle {
-          animation: bounce-gentle 2s infinite;
-        }
-      `}</style>
-    </div>
+      </section>
+    </main>
   );
 };
 

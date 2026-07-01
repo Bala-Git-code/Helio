@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { jwtDecode } from "jwt-decode"; // You need to install this: npm install jwt-decode
 import WelcomePage from './components/WelcomePage';
 import AuthPage from './components/AuthPage';
 import BasicInfoPage from './components/BasicInfoPage';
@@ -12,21 +13,59 @@ function App() {
   const [appointments, setAppointments] = useState([]);
   const [appointmentSummaries, setAppointmentSummaries] = useState([]);
 
+  // 1. ADD A NEW STATE TO TRIGGER THE NOTIFICATION
+  const [showLoginNotification, setShowLoginNotification] = useState(false);
+
+  // 2. ADD THIS useEffect TO HANDLE THE GOOGLE REDIRECT
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+
+    // If a token is found in the URL, it means we're coming from a Google login
+    if (token) {
+      localStorage.setItem('jwtToken', token);
+      
+      // Decode the token to get user information
+      const decodedToken = jwtDecode(token);
+      const userData = {
+        id: decodedToken.user.id,
+        role: decodedToken.user.role,
+        // The name and email are not in the token, you might need to fetch them
+        // or add them to the token payload on your backend.
+        // For now, we'll use a placeholder.
+        name: decodedToken.user.name || 'New User', 
+        email: decodedToken.user.email || 'No email',
+        userType: decodedToken.user.role
+      };
+
+      // Call the success handler, treating it as an existing user and triggering the notification
+      handleAuthSuccess(userData, false, true);
+
+      // Clean the URL by removing the token, so it doesn't get processed again
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []); // The empty array [] ensures this runs only once when the app first loads
+
   const handleGetStarted = () => {
     setCurrentPage('auth');
   };
 
-  // ✅ now handles new user vs existing user
-  const handleAuthSuccess = (userData, isNewUser) => {
-    setUser({ ...userData, id: Date.now().toString() });
+  const handleGoHome = () => {
+    setCurrentPage('welcome');
+  };
+
+  // 3. MODIFY handleAuthSuccess TO ACCEPT THE NOTIFICATION TRIGGER
+  const handleAuthSuccess = (userData, isNewUser, showNotification = false) => {
+    setUser(userData);
+    setShowLoginNotification(showNotification); // Set the state here
 
     if (userData.userType === 'doctor') {
       setCurrentPage('doctorDashboard');
     } else {
       if (isNewUser) {
-        setCurrentPage('basicInfo'); // only for new patient accounts
+        setCurrentPage('basicInfo');
       } else {
-        setCurrentPage('dashboard'); // existing patients → dashboard
+        setCurrentPage('dashboard');
       }
     }
   };
@@ -69,9 +108,14 @@ function App() {
   const handleUpdateUser = (updatedUser) => {
     setUser(updatedUser);
   };
+  
+  // A new handler to dismiss the notification from the Dashboard
+  const handleNotificationDismiss = () => {
+      setShowLoginNotification(false);
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-100">
+    <div className="page-shell">
       {currentPage === 'welcome' && <WelcomePage onGetStarted={handleGetStarted} />}
       {currentPage === 'auth' && <AuthPage onAuthSuccess={handleAuthSuccess} />}
       {currentPage === 'basicInfo' && <BasicInfoPage onComplete={handleBasicInfoComplete} />}
@@ -82,6 +126,7 @@ function App() {
           onLogout={handleLogout}
         />
       )}
+      {/* 4. PASS THE NEW PROP AND HANDLER TO THE DASHBOARD */}
       {currentPage === 'dashboard' && user && (
         <Dashboard 
           user={user} 
@@ -94,6 +139,11 @@ function App() {
           onAddAppointment={handleAddAppointment}
           onDeleteAppointment={handleDeleteAppointment}
           onSaveAppointmentSummary={handleSaveAppointmentSummary}
+          onGoHome={handleGoHome}
+          // Pass the notification trigger state
+          showSuccessNotification={showLoginNotification}
+          // Pass the handler to allow the notification to be dismissed
+          onNotificationDismiss={handleNotificationDismiss}
         />
       )}
     </div>
