@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { User, Phone, MapPin, Calendar, Users, ArrowRight, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Calendar, MapPin, Phone, Plus, Trash2, User, Users } from 'lucide-react';
+import { Button, Card, Field, IconButton, SectionHeader } from './design-system';
 
 const BasicInfoPage = ({ onComplete }) => {
   const [formData, setFormData] = useState({
@@ -8,214 +9,116 @@ const BasicInfoPage = ({ onComplete }) => {
     gender: '',
     phone: '',
     address: '',
-    emergencyContact: {
-      name: '',
-      relationship: '',
-      phone: ''
-    },
-    allergies: ['']
+    emergencyContact: { name: '', relationship: '', phone: '' },
+    allergies: [''],
   });
 
   const handleSubmit = (e) => {
     e.preventDefault();
     onComplete({
       name: formData.name,
-      age: parseInt(formData.age),
+      age: parseInt(formData.age, 10),
       gender: formData.gender,
       phone: formData.phone,
       address: formData.address,
       emergencyContact: formData.emergencyContact,
-      allergies: formData.allergies.filter(allergy => allergy.trim() !== '')
+      allergies: formData.allergies.filter((allergy) => allergy.trim() !== ''),
     });
   };
 
-  const addAllergy = () => {
-    setFormData({
-      ...formData,
-      allergies: [...formData.allergies, '']
-    });
-  };
-
+  const addAllergy = () => setFormData({ ...formData, allergies: [...formData.allergies, ''] });
   const updateAllergy = (index, value) => {
-    const newAllergies = [...formData.allergies];
-    newAllergies[index] = value;
-    setFormData({
-      ...formData,
-      allergies: newAllergies
-    });
+    const nextAllergies = [...formData.allergies];
+    nextAllergies[index] = value;
+    setFormData({ ...formData, allergies: nextAllergies });
   };
-
-  const removeAllergy = (index) => {
-    const newAllergies = formData.allergies.filter((_, i) => i !== index);
-    setFormData({
-      ...formData,
-      allergies: newAllergies
-    });
-  };
+  const removeAllergy = (index) => setFormData({ ...formData, allergies: formData.allergies.filter((_, i) => i !== index) });
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    
     if (name.startsWith('emergency.')) {
       const field = name.split('.')[1];
-      setFormData({
-        ...formData,
-        emergencyContact: {
-          ...formData.emergencyContact,
-          [field]: value
-        }
-      });
-    } else {
-      setFormData({
-        ...formData,
-        [name]: value
-      });
+      setFormData({ ...formData, emergencyContact: { ...formData.emergencyContact, [field]: value } });
+      return;
     }
+    setFormData({ ...formData, [name]: value });
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-100">
-      {/* Background */}
-      <div className="absolute inset-0">
-        <div className="absolute top-20 left-20 w-72 h-72 bg-gradient-to-br from-emerald-400/10 to-teal-400/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-20 right-20 w-96 h-96 bg-gradient-to-br from-teal-400/10 to-cyan-400/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
-      </div>
+    <main className="page-shell px-4 py-8">
+      <div className="content-shell max-w-4xl">
+        <SectionHeader
+          eyebrow="Care profile"
+          title="Tell Helio what matters in an emergency and day to day."
+          description="This profile personalizes reminders, care-team context, allergy warnings, and emergency access."
+        />
 
-      <div className="max-w-2xl w-full relative z-10">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent mb-4">
-            Let's get to know you better
-          </h1>
-          <p className="text-gray-600 text-lg">
-            Help us personalize your health assistant experience
-          </p>
-        </div>
-
-        {/* Form Container */}
-        <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-xl border border-white/20 p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Basic Information Section */}
-            <div className="space-y-4">
-              <h3 className="text-xl font-semibold text-gray-800 flex items-center">
-                <User className="w-5 h-5 mr-2 text-emerald-600" />
-                Basic Information
-              </h3>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
-                    placeholder="John Doe"
-                    required
-                  />
+        <Card className="mt-8 p-5 sm:p-8">
+          <form onSubmit={handleSubmit} className="space-y-8">
+            <section>
+              <div className="mb-5 flex items-center gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-700">
+                  <User className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-950">Personal details</h2>
+                  <p className="text-sm text-slate-500">Used for your dashboard greeting and care profile.</p>
                 </div>
               </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Age</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                    <input
-                      type="number"
-                      name="age"
-                      value={formData.age}
-                      onChange={handleInputChange}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
-                      placeholder="25"
-                      required
-                    />
-                  </div>
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
-                  <select
-                    name="gender"
-                    value={formData.gender}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
-                    required
-                  >
-                    <option value="">Select Gender</option>
-                    <option value="male">Male</option>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="Full name">
+                  <input className="input-field" type="text" name="name" value={formData.name} onChange={handleInputChange} placeholder="Avery Morgan" required />
+                </Field>
+                <Field label="Age">
+                  <div className="relative">
+                    <Calendar className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
+                    <input className="input-field pl-10" type="number" min="0" name="age" value={formData.age} onChange={handleInputChange} placeholder="34" required />
+                  </div>
+                </Field>
+                <Field label="Gender">
+                  <select className="input-field" name="gender" value={formData.gender} onChange={handleInputChange} required>
+                    <option value="">Select gender</option>
                     <option value="female">Female</option>
+                    <option value="male">Male</option>
                     <option value="other">Other</option>
                   </select>
+                </Field>
+                <Field label="Phone number">
+                  <div className="relative">
+                    <Phone className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
+                    <input className="input-field pl-10" type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+1 (555) 123-4567" required />
+                  </div>
+                </Field>
+              </div>
+
+              <div className="mt-4">
+                <Field label="Address">
+                  <div className="relative">
+                    <MapPin className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
+                    <input className="input-field pl-10" type="text" name="address" value={formData.address} onChange={handleInputChange} placeholder="123 Main St, City, State" required />
+                  </div>
+                </Field>
+              </div>
+            </section>
+
+            <section className="border-t border-slate-200 pt-8">
+              <div className="mb-5 flex items-center gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-2xl border border-red-100 bg-red-50 text-red-700">
+                  <Users className="h-5 w-5" />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
-                    placeholder="+1 (555) 123-4567"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
-                    placeholder="123 Main St, City, State"
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Emergency Contact Section */}
-            <div className="space-y-4 border-t border-gray-200 pt-6">
-              <h3 className="text-xl font-semibold text-gray-800 flex items-center">
-                <Users className="w-5 h-5 mr-2 text-red-500" />
-                Emergency Contact
-              </h3>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Name</label>
-                <input
-                  type="text"
-                  name="emergency.name"
-                  value={formData.emergencyContact.name}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
-                  placeholder="Emergency contact name"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Relationship</label>
-                  <select
-                    name="emergency.relationship"
-                    value={formData.emergencyContact.relationship}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
-                    required
-                  >
-                    <option value="">Select Relationship</option>
+                  <h2 className="text-xl font-semibold text-slate-950">Emergency contact</h2>
+                  <p className="text-sm text-slate-500">Visible in urgent workflows and AI guidance.</p>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <Field label="Contact name">
+                  <input className="input-field" type="text" name="emergency.name" value={formData.emergencyContact.name} onChange={handleInputChange} placeholder="Jordan Morgan" required />
+                </Field>
+                <Field label="Relationship">
+                  <select className="input-field" name="emergency.relationship" value={formData.emergencyContact.relationship} onChange={handleInputChange} required>
+                    <option value="">Select</option>
                     <option value="spouse">Spouse</option>
                     <option value="parent">Parent</option>
                     <option value="child">Child</option>
@@ -223,72 +126,51 @@ const BasicInfoPage = ({ onComplete }) => {
                     <option value="friend">Friend</option>
                     <option value="other">Other</option>
                   </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                  <input
-                    type="tel"
-                    name="emergency.phone"
-                    value={formData.emergencyContact.phone}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
-                    placeholder="+1 (555) 123-4567"
-                    required
-                  />
-                </div>
+                </Field>
+                <Field label="Phone number">
+                  <input className="input-field" type="tel" name="emergency.phone" value={formData.emergencyContact.phone} onChange={handleInputChange} placeholder="+1 (555) 987-6543" required />
+                </Field>
               </div>
-            </div>
+            </section>
 
-            {/* Allergies Section */}
-            <div className="space-y-4 border-t border-gray-200 pt-6">
-              <h3 className="text-xl font-semibold text-gray-800 flex items-center">
-                <AlertTriangle className="w-5 h-5 mr-2 text-orange-500" />
-                Known Allergies
-              </h3>
-              
+            <section className="border-t border-slate-200 pt-8">
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-11 w-11 place-items-center rounded-2xl border border-amber-100 bg-amber-50 text-amber-700">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-slate-950">Known allergies</h2>
+                    <p className="text-sm text-slate-500">Add anything Helio should flag before reminders.</p>
+                  </div>
+                </div>
+                <Button type="button" variant="secondary" size="sm" onClick={addAllergy}>
+                  <Plus className="h-4 w-4" />
+                  Add
+                </Button>
+              </div>
               <div className="space-y-3">
                 {formData.allergies.map((allergy, index) => (
-                  <div key={index} className="flex items-center space-x-3">
-                    <input
-                      type="text"
-                      value={allergy}
-                      onChange={(e) => updateAllergy(index, e.target.value)}
-                      className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all duration-200"
-                      placeholder="e.g., Penicillin, Peanuts, Latex"
-                    />
+                  <div key={index} className="flex gap-3">
+                    <input className="input-field" type="text" value={allergy} onChange={(e) => updateAllergy(index, e.target.value)} placeholder="Penicillin, peanuts, latex..." />
                     {formData.allergies.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeAllergy(index)}
-                        className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        ×
-                      </button>
+                      <IconButton label="Remove allergy" type="button" onClick={() => removeAllergy(index)}>
+                        <Trash2 className="h-4 w-4 text-red-600" />
+                      </IconButton>
                     )}
                   </div>
                 ))}
-                <button
-                  type="button"
-                  onClick={addAllergy}
-                  className="text-emerald-600 hover:text-emerald-700 text-sm font-medium flex items-center"
-                >
-                  + Add Another Allergy
-                </button>
               </div>
-            </div>
+            </section>
 
-            <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white py-4 rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center"
-            >
-              Continue to Dashboard
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </button>
+            <Button type="submit" size="lg" className="w-full">
+              Continue to dashboard
+              <ArrowRight className="h-5 w-5" />
+            </Button>
           </form>
-        </div>
+        </Card>
       </div>
-    </div>
+    </main>
   );
 };
 

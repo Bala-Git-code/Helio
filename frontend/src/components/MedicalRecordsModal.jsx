@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Upload, FileText, Image, Download, Trash2, Eye, Lock } from 'lucide-react';
 
 const MedicalRecordsModal = ({ onClose, user }) => {
-  
+  const [records, setRecords] = useState([]);
   const [dragActive, setDragActive] = useState(false);
 
   const handleDrag = (e) => {
@@ -54,8 +54,8 @@ const MedicalRecordsModal = ({ onClose, user }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 max-w-4xl w-full max-h-[85vh] overflow-hidden">
+    <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="surface-card-strong max-w-4xl w-full max-h-[85vh] overflow-hidden">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-gray-200">
           <div className="flex items-center">
@@ -71,7 +71,7 @@ const MedicalRecordsModal = ({ onClose, user }) => {
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 hover:bg-emerald-50 rounded-full transition-colors"
           >
             <X className="w-6 h-6 text-gray-600" />
           </button>
@@ -104,7 +104,7 @@ const MedicalRecordsModal = ({ onClose, user }) => {
             />
             <label
               htmlFor="file-upload"
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold cursor-pointer hover:shadow-lg transform hover:scale-105 transition-all duration-300 inline-block"
+              className="btn-primary px-6 py-3 cursor-pointer inline-block"
             >
               Choose Files
             </label>
@@ -174,7 +174,7 @@ const MedicalRecordsModal = ({ onClose, user }) => {
         <div className="p-6 border-t border-gray-200">
           <button
             onClick={onClose}
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300"
+            className="btn-primary w-full py-3"
           >
             Close
           </button>

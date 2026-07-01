@@ -1,5 +1,195 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-/* Ensure Tailwind CSS is processed by your build tool */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --bg: #f6fbfa;
+  --bg-quiet: #eef8f5;
+  --surface: rgba(255, 255, 255, 0.86);
+  --surface-strong: #ffffff;
+  --surface-muted: #f8fafc;
+  --border: rgba(15, 118, 110, 0.14);
+  --border-strong: rgba(15, 23, 42, 0.12);
+  --text: #0f172a;
+  --text-muted: #475569;
+  --text-soft: #64748b;
+  --primary: #0f8f72;
+  --primary-strong: #0b6f59;
+  --secondary: #0ea5a3;
+  --success: #159957;
+  --warning: #b7791f;
+  --info: #2563eb;
+  --emergency: #dc2626;
+  --medicine: #10b981;
+  --appointment: #0ea5e9;
+  --record: #4f46e5;
+  --analytics: #f59e0b;
+  --ai: #7c3aed;
+  --doctor: #2563eb;
+  --patient: #0f8f72;
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 1.75rem;
+  --shadow-soft: 0 18px 50px -28px rgba(15, 23, 42, 0.32);
+  --shadow-card: 0 24px 70px -34px rgba(15, 118, 110, 0.3);
+  --shadow-elevated: 0 32px 90px -38px rgba(15, 23, 42, 0.35);
+  --shadow-glow: 0 18px 42px -20px rgba(15, 143, 114, 0.75);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 8% 5%, rgba(20, 184, 143, 0.14), transparent 30rem),
+    radial-gradient(circle at 92% 10%, rgba(14, 165, 233, 0.12), transparent 34rem),
+    linear-gradient(180deg, var(--bg), #eef8f7 48%, #f8fbff);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(20, 184, 143, 0.22);
+  color: #064e3b;
+}
+
+@layer components {
+  .page-shell {
+    @apply min-h-screen text-slate-950;
+    background:
+      linear-gradient(rgba(255,255,255,0.46), rgba(255,255,255,0.36)),
+      radial-gradient(circle at 15% 15%, rgba(20,184,143,0.12), transparent 28rem),
+      radial-gradient(circle at 85% 5%, rgba(14,165,233,0.12), transparent 32rem),
+      var(--bg);
+  }
+
+  .content-shell {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .helio-card {
+    @apply rounded-[var(--radius-xl)] border border-[color:var(--border)] bg-[color:var(--surface)] shadow-[var(--shadow-card)] backdrop-blur-xl;
+  }
+
+  .helio-card-interactive {
+    @apply transition duration-300 hover:-translate-y-0.5 hover:shadow-[var(--shadow-elevated)];
+  }
+
+  .surface-card {
+    @apply rounded-[var(--radius-xl)] border border-[color:var(--border)] bg-[color:var(--surface)] shadow-[var(--shadow-card)] backdrop-blur-xl;
+  }
+
+  .surface-card-strong {
+    @apply rounded-[var(--radius-2xl)] border border-[color:var(--border-strong)] bg-[color:var(--surface-strong)] shadow-[var(--shadow-elevated)];
+  }
+
+  .section-kicker {
+    @apply inline-flex items-center rounded-full border border-emerald-200/80 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 font-semibold text-white shadow-[var(--shadow-glow)] transition duration-300 hover:-translate-y-0.5 hover:brightness-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:opacity-60 disabled:hover:translate-y-0;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white/85 font-semibold text-slate-700 shadow-sm transition duration-300 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl font-semibold text-slate-600 transition duration-300 hover:bg-white/80 hover:text-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 font-semibold text-white shadow-[0_18px_42px_-20px_rgba(220,38,38,0.8)] transition duration-300 hover:-translate-y-0.5 hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2;
+  }
+
+  .btn-icon {
+    @apply grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-slate-200 bg-white/85 text-slate-600 shadow-sm transition duration-300 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2;
+  }
+
+  .input-field {
+    @apply w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 text-slate-800 shadow-sm outline-none transition duration-200 placeholder:text-slate-400 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100;
+  }
+
+  .nav-glass {
+    @apply sticky top-0 z-40 border-b border-emerald-100/70 bg-white/[0.78] backdrop-blur-2xl;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/75 px-3 py-1 text-sm font-medium text-slate-600 shadow-sm;
+  }
+}
+
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes floatSoft {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-rise-in {
+  animation: riseIn 0.7s ease both;
+}
+
+.animate-float-soft {
+  animation: floatSoft 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
