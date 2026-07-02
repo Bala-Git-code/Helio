@@ -6,34 +6,74 @@ const HealthRecord = require('../models/HealthRecord');
 const DoctorNote = require('../models/DoctorNote');
 const AccessPermission = require('../models/AccessPermission');
 const AuditLog = require('../models/AuditLog');
+const Notification = require('../models/Notification');
+const MedicineLog = require('../models/MedicineLog');
 const geminiService = require('../services/geminiService');
 const whatsappService = require('../services/whatsappService');
 
-// --- PATIENT HEALTH DASHBOARD ---
+// --- PATIENT HEALTH DASHBOARD AGGREGATION ---
 exports.getPatientDashboard = async (req, res, next) => {
   try {
-    let profile = await PatientProfile.findOne({ userId: req.user._id }).lean();
+    let profile = await PatientProfile.findOne({ userId: req.user._id });
     if (!profile) {
-      const newProfile = new PatientProfile({
+      profile = new PatientProfile({
         userId: req.user._id,
         displayName: req.user.name,
       });
-      profile = await newProfile.save();
-      profile = profile.toObject();
+      await profile.save();
     }
     
-    const medications = await Medication.find({ userId: req.user._id }).sort({ createdAt: -1 }).lean();
-    const appointments = await Appointment.find({ userId: req.user._id }).sort({ date: 1 }).lean();
-    const records = await HealthRecord.find({ userId: req.user._id }).sort({ date: -1 }).lean();
-    const notes = await DoctorNote.find({ patientId: req.user._id }).sort({ createdAt: -1 }).lean();
+    const medications = await Medication.find({ userId: req.user._id }).sort({ createdAt: -1 });
+    const appointments = await Appointment.find({ userId: req.user._id }).sort({ date: 1 });
+    const records = await HealthRecord.find({ userId: req.user._id }).sort({ date: -1 });
+    const notes = await DoctorNote.find({ patientId: req.user._id }).sort({ createdAt: -1 });
+    const notifications = await Notification.find({ userId: req.user._id }).sort({ createdAt: -1 }).limit(30);
+
+    // --- DYNAMIC HEALTH SCORE CALCULATION ENGINE ---
+    // 1. Dosing Adherence percentage
+    let totalTaken = 0;
+    let totalTarget = 0;
+    medications.forEach(m => {
+      if (m.adherence) {
+        totalTaken += (m.adherence.taken || 0);
+        totalTarget += (m.adherence.target || 0);
+      }
+    });
+    let adherenceScore = totalTarget > 0 ? Math.round((totalTaken / totalTarget) * 100) : 100;
+
+    // 2. Vitals bonus: +10 if they logged vitals in the past 7 days
+    let vitalsBonus = 0;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const hasRecentVitals = profile.vitalsHistory && profile.vitalsHistory.some(vh => new Date(vh.loggedAt) >= sevenDaysAgo);
+    if (hasRecentVitals) {
+      vitalsBonus = 10;
+    }
+
+    // 3. Emergency SOS penalty: -20 per SOS trigger in the last 7 days
+    const recentSosCount = await AuditLog.countDocuments({
+      actorId: req.user._id,
+      action: 'SOS_TRIGGER',
+      createdAt: { $gte: sevenDaysAgo }
+    });
+    const sosPenalty = recentSosCount * 20;
+
+    // 4. Calculate Final score
+    let calculatedScore = Math.max(0, Math.min(100, adherenceScore + vitalsBonus - sosPenalty));
+
+    // Save calculation update to profile if changed
+    if (profile.healthScore !== calculatedScore) {
+      profile.healthScore = calculatedScore;
+      await profile.save();
+    }
 
     res.json({
       success: true,
-      profile: profile || {},
+      profile: profile.toObject(),
       medications,
       appointments,
       records,
       notes,
+      notifications,
     });
   } catch (error) {
     next(error);
@@ -82,7 +122,6 @@ exports.postVitals = async (req, res, next) => {
       loggedAt: new Date()
     });
 
-    // Dyn score adjustments
     let scoreDelta = 0;
     if (newVitals.heartRate >= 60 && newVitals.heartRate <= 100) scoreDelta += 1;
     if (newVitals.oxygenSaturation >= 95) scoreDelta += 1;
@@ -91,6 +130,16 @@ exports.postVitals = async (req, res, next) => {
     }
 
     await profile.save();
+
+    // Trigger Notification
+    await Notification.create({
+      userId: req.user._id,
+      category: 'system',
+      title: 'Vitals Recorded',
+      message: `Vitals logged: Heart Rate ${newVitals.heartRate || 'N/A'} bpm, SpO2 ${newVitals.oxygenSaturation || 'N/A'}%.`,
+      priority: 'low'
+    });
+
     res.json(profile);
   } catch (error) {
     next(error);
@@ -101,6 +150,15 @@ exports.postVitals = async (req, res, next) => {
 exports.postMedications = async (req, res, next) => {
   try {
     const medication = await Medication.create({ userId: req.user._id, ...req.body });
+    
+    await Notification.create({
+      userId: req.user._id,
+      category: 'medicine',
+      title: 'Medication Schedule Added',
+      message: `A new routine for ${medication.name} (${medication.dosage}) has been added to your care timeline.`,
+      priority: 'medium'
+    });
+
     res.status(201).json(medication);
   } catch (error) {
     next(error);
@@ -109,8 +167,44 @@ exports.postMedications = async (req, res, next) => {
 
 exports.deleteMedications = async (req, res, next) => {
   try {
-    await Medication.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    const medication = await Medication.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    if (medication) {
+      await Notification.create({
+        userId: req.user._id,
+        category: 'medicine',
+        title: 'Medication Deleted',
+        message: `Medication schedule for ${medication.name} has been removed.`,
+        priority: 'low'
+      });
+    }
     res.json({ success: true, message: 'Medication removed successfully.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Pause / Resume Medication status
+exports.patchMedicationStatus = async (req, res, next) => {
+  const { active } = req.body;
+  try {
+    const medication = await Medication.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user._id },
+      { $set: { active } },
+      { new: true }
+    );
+    if (!medication) {
+      return res.status(404).json({ success: false, message: 'Medication not found.' });
+    }
+
+    await Notification.create({
+      userId: req.user._id,
+      category: 'medicine',
+      title: active ? 'Medication Resumed' : 'Medication Paused',
+      message: `Medication schedule for ${medication.name} was ${active ? 'resumed' : 'paused'}.`,
+      priority: 'low'
+    });
+
+    res.json(medication);
   } catch (error) {
     next(error);
   }
@@ -135,13 +229,23 @@ exports.postTakeDose = async (req, res, next) => {
     });
     await medication.save();
 
+    // Create database log entry
+    await MedicineLog.create({
+      userId: req.user._id,
+      medicationId: medication._id,
+      timeSlot: timeSlot || 'daily',
+      takenAt: new Date(),
+      delayMinutes: 0,
+      skipped: false,
+      source: 'manual'
+    });
+
     const profile = await PatientProfile.findOne({ userId: req.user._id });
     if (profile && profile.healthScore < 100) {
       profile.healthScore = Math.min(profile.healthScore + 2, 100);
       await profile.save();
     }
 
-    // simulated Meta WhatsApp alert
     await whatsappService.sendMessage(
       profile?.phone || 'Patient Phone',
       `Helio Care: Intake of ${medication.name} registered. Remaining pill stock: ${medication.quantity}.`
@@ -171,6 +275,15 @@ exports.postRefillMed = async (req, res, next) => {
 
     medication.quantity = (medication.quantity || 0) + (Number(refillAmount) || 30);
     await medication.save();
+
+    await Notification.create({
+      userId: req.user._id,
+      category: 'medicine',
+      title: 'Medication Refilled',
+      message: `Pill stock refilled for ${medication.name}. Remaining: ${medication.quantity}.`,
+      priority: 'low'
+    });
+
     res.json(medication);
   } catch (error) {
     next(error);
@@ -189,6 +302,15 @@ exports.postAppointments = async (req, res, next) => {
         'appointment'
       );
     }
+
+    await Notification.create({
+      userId: req.user._id,
+      category: 'appointment',
+      title: 'Consultation Scheduled',
+      message: `Appointment scheduled with ${appointment.doctorName} on ${new Date(appointment.date).toLocaleDateString()} at ${appointment.time}.`,
+      priority: 'medium'
+    });
+
     res.status(201).json(appointment);
   } catch (error) {
     next(error);
@@ -197,7 +319,16 @@ exports.postAppointments = async (req, res, next) => {
 
 exports.deleteAppointments = async (req, res, next) => {
   try {
-    await Appointment.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    const appointment = await Appointment.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    if (appointment) {
+      await Notification.create({
+        userId: req.user._id,
+        category: 'appointment',
+        title: 'Consultation Cancelled',
+        message: `Appointment with ${appointment.doctorName} has been cancelled.`,
+        priority: 'low'
+      });
+    }
     res.json({ success: true, message: 'Appointment cancelled successfully.' });
   } catch (error) {
     next(error);
@@ -228,6 +359,15 @@ exports.putAppointmentStatus = async (req, res, next) => {
       );
     }
 
+    // Trigger Notification to patient
+    await Notification.create({
+      userId: appointment.userId,
+      category: 'appointment',
+      title: 'Consultation Status Updated',
+      message: `Dr. ${req.user.name} updated status of appointment to ${status.toUpperCase()}.`,
+      priority: 'medium'
+    });
+
     res.json(appointment);
   } catch (error) {
     next(error);
@@ -238,6 +378,15 @@ exports.putAppointmentStatus = async (req, res, next) => {
 exports.postRecords = async (req, res, next) => {
   try {
     const record = await HealthRecord.create({ userId: req.user._id, ...req.body });
+    
+    await Notification.create({
+      userId: req.user._id,
+      category: 'system',
+      title: 'Medical Record Uploaded',
+      message: `A new clinical record "${record.title}" has been saved to your health vault.`,
+      priority: 'low'
+    });
+
     res.status(201).json(record);
   } catch (error) {
     next(error);
@@ -246,7 +395,16 @@ exports.postRecords = async (req, res, next) => {
 
 exports.deleteRecords = async (req, res, next) => {
   try {
-    await HealthRecord.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    const record = await HealthRecord.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    if (record) {
+      await Notification.create({
+        userId: req.user._id,
+        category: 'system',
+        title: 'Medical Record Removed',
+        message: `Clinical record "${record.title}" has been deleted from your health vault.`,
+        priority: 'low'
+      });
+    }
     res.json({ success: true, message: 'Health record deleted successfully.' });
   } catch (error) {
     next(error);
@@ -326,6 +484,15 @@ Critical conditions & allergy logs available on profile.`;
       summary: `SOS Panic alert sent to emergency contact ${emergencyContact.name}. Location registered: ${latitude || 'N/A'}, ${longitude || 'N/A'}.`,
     });
 
+    // Create Notification
+    await Notification.create({
+      userId: req.user._id,
+      category: 'emergency',
+      title: '🚨 Emergency SOS Dispatched',
+      message: `SOS Panic alert dispatched to emergency contact Jordan. Location registered: ${latitude ? 'Coordinates active' : 'N/A'}.`,
+      priority: 'high'
+    });
+
     // Audit Log
     await AuditLog.create({
       actorId: req.user._id,
@@ -358,7 +525,6 @@ exports.postDoctorLinkPatient = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Patient account details not found.' });
     }
 
-    // Check if permission already exists
     let permission = await AccessPermission.findOne({
       patientId: profile.userId,
       doctorId: req.user._id
@@ -375,12 +541,10 @@ exports.postDoctorLinkPatient = async (req, res, next) => {
           patient: { id: profile.userId, name: patientUser.name, accessCode: profile.accessCode }
         });
       }
-      // If previously revoked, reset to pending
       permission.status = 'pending';
       permission.history.push({ status: 'pending', changedAt: new Date() });
       await permission.save();
     } else {
-      // Create a new pending linkage request
       permission = new AccessPermission({
         patientId: profile.userId,
         doctorId: req.user._id,
@@ -390,7 +554,15 @@ exports.postDoctorLinkPatient = async (req, res, next) => {
       await permission.save();
     }
 
-    // Audit Log
+    // Trigger Notification to patient
+    await Notification.create({
+      userId: profile.userId,
+      category: 'doctor',
+      title: 'Clinician Access Request',
+      message: `Doctor ${req.user.name} is requesting clinical timeline permissions. Check the support options tab.`,
+      priority: 'high'
+    });
+
     await AuditLog.create({
       actorId: req.user._id,
       action: 'LINK_REQUEST',
@@ -414,7 +586,6 @@ exports.postDoctorLinkPatient = async (req, res, next) => {
 
 exports.getDoctorDashboard = async (req, res, next) => {
   try {
-    // Return all patients that have APPROVED clinical links to this doctor
     const permissions = await AccessPermission.find({
       doctorId: req.user._id,
       status: 'approved'
@@ -442,7 +613,6 @@ exports.getDoctorDashboard = async (req, res, next) => {
 exports.getDoctorPatientDetails = async (req, res, next) => {
   const { id } = req.params;
   try {
-    // Verify active approved access permission
     const permission = await AccessPermission.findOne({
       patientId: id,
       doctorId: req.user._id,
@@ -488,7 +658,6 @@ exports.postDoctorNotes = async (req, res, next) => {
   }
 
   try {
-    // Verify link status
     const permission = await AccessPermission.findOne({
       patientId,
       doctorId: req.user._id,
@@ -515,7 +684,15 @@ exports.postDoctorNotes = async (req, res, next) => {
       );
     }
 
-    // Audit Log
+    // Trigger Notification to patient
+    await Notification.create({
+      userId: patientId,
+      category: 'doctor',
+      title: `Clinical Bulletin: ${title}`,
+      message: `Dr. ${req.user.name} added a note: "${content.substring(0, 60)}..."`,
+      priority: 'high'
+    });
+
     await AuditLog.create({
       actorId: req.user._id,
       action: 'ADD_NOTE',
@@ -557,14 +734,22 @@ exports.postApproveConsent = async (req, res, next) => {
     permission.history.push({ status: 'approved', changedAt: new Date() });
     await permission.save();
 
-    // Link doctor to profile
     const profile = await PatientProfile.findOne({ userId: req.user.id });
     if (profile && !profile.doctorAccess.includes(permission.doctorId)) {
       profile.doctorAccess.push(permission.doctorId);
       await profile.save();
     }
 
-    // Audit Log
+    // Trigger system notification
+    const docUser = await User.findById(permission.doctorId);
+    await Notification.create({
+      userId: req.user.id,
+      category: 'doctor',
+      title: 'Clinician Connected',
+      message: `Clinical access granted to Dr. ${docUser?.name || 'Practitioner'}.`,
+      priority: 'medium'
+    });
+
     await AuditLog.create({
       actorId: req.user.id,
       action: 'APPROVE_CONSENT',
@@ -594,14 +779,22 @@ exports.postRevokeConsent = async (req, res, next) => {
     permission.history.push({ status: 'revoked', changedAt: new Date() });
     await permission.save();
 
-    // Unlink doctor from profile
     const profile = await PatientProfile.findOne({ userId: req.user.id });
     if (profile) {
       profile.doctorAccess = profile.doctorAccess.filter(id => id.toString() !== permission.doctorId.toString());
       await profile.save();
     }
 
-    // Audit Log
+    // Trigger system notification
+    const docUser = await User.findById(permission.doctorId);
+    await Notification.create({
+      userId: req.user.id,
+      category: 'doctor',
+      title: 'Clinician Connection Revoked',
+      message: `Access revoked for Dr. ${docUser?.name || 'Practitioner'}.`,
+      priority: 'medium'
+    });
+
     await AuditLog.create({
       actorId: req.user.id,
       action: 'REVOKE_CONSENT',
@@ -610,6 +803,41 @@ exports.postRevokeConsent = async (req, res, next) => {
     });
 
     res.json({ success: true, message: 'Clinical access revoked successfully.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// --- NOTIFICATION HANDLERS ---
+exports.getNotifications = async (req, res, next) => {
+  try {
+    const notifications = await Notification.find({ userId: req.user._id }).sort({ createdAt: -1 });
+    res.json({ success: true, notifications });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.patchMarkNotificationRead = async (req, res, next) => {
+  try {
+    const notification = await Notification.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user._id },
+      { $set: { read: true } },
+      { new: true }
+    );
+    if (!notification) {
+      return res.status(404).json({ success: false, message: 'Notification alert not found.' });
+    }
+    res.json({ success: true, notification });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.deleteNotification = async (req, res, next) => {
+  try {
+    await Notification.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    res.json({ success: true, message: 'Notification removed.' });
   } catch (error) {
     next(error);
   }
