@@ -18,6 +18,13 @@ import {
   Shield,
   Sparkles,
   Users,
+  CheckCircle2,
+  Trash2,
+  TrendingUp,
+  User,
+  HeartPulse,
+  Copy,
+  Check
 } from 'lucide-react';
 import SuccessNotification from './SuccessNotification';
 import MedicineReminder from './MedicineReminder';
@@ -28,18 +35,11 @@ import AboutModal from './AboutModal';
 import MedicalRecordsModal from './MedicalRecordsModal';
 import AppointmentSummaryModal from './AppointmentSummaryModal';
 import { apiRequest } from '../utils/api';
-import { BrandMark, Button, Card, EmptyState, IconButton, SectionHeader, StatCard } from './design-system';
+import { BrandMark, Button, Card, EmptyState, IconButton, SectionHeader, StatCard, Field } from './design-system';
 
 const Dashboard = ({
   user,
-  medicines,
-  appointments,
-  appointmentSummaries,
-  onAddMedicine,
-  onDeleteMedicine,
-  onAddAppointment,
-  onDeleteAppointment,
-  onSaveAppointmentSummary,
+  onUpdateUser,
   onGoHome,
   showSuccessNotification,
   onNotificationDismiss,
@@ -47,6 +47,7 @@ const Dashboard = ({
   const [careData, setCareData] = useState({ profile: {}, medications: [], appointments: [], records: [], notes: [] });
   const [isLoadingCareData, setIsLoadingCareData] = useState(true);
   const [careError, setCareError] = useState('');
+  
   const [showMedicineModal, setShowMedicineModal] = useState(false);
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -55,23 +56,34 @@ const Dashboard = ({
   const [showMedicalRecords, setShowMedicalRecords] = useState(false);
   const [showAppointmentSummary, setShowAppointmentSummary] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
+  
+  // Interactive feature states
+  const [showVitalsForm, setShowVitalsForm] = useState(false);
+  const [vitalsInput, setVitalsInput] = useState({
+    weight: '', height: '', heartRate: '', bloodPressure: '', temperature: '', oxygenSaturation: ''
+  });
+  const [showFamilyForm, setShowFamilyForm] = useState(false);
+  const [familyInput, setFamilyInput] = useState({ name: '', relationship: 'spouse', phone: '' });
+  
   const [isAlerting, setIsAlerting] = useState(false);
   const [countdown, setCountdown] = useState(10);
+  const [sosSuccess, setSosSuccess] = useState('');
   const [showNotification, setShowNotification] = useState(showSuccessNotification);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const loadCareData = async () => {
+    try {
+      setIsLoadingCareData(true);
+      const data = await apiRequest('/health/dashboard');
+      setCareData(data);
+    } catch (error) {
+      setCareError(error.message || 'Unable to load your health insights right now.');
+    } finally {
+      setIsLoadingCareData(false);
+    }
+  };
 
   useEffect(() => {
-    const loadCareData = async () => {
-      try {
-        setIsLoadingCareData(true);
-        const data = await apiRequest('/health/dashboard');
-        setCareData(data);
-      } catch (error) {
-        setCareError(error.message || 'Unable to load your health insights right now.');
-      } finally {
-        setIsLoadingCareData(false);
-      }
-    };
-
     if (user?.email) loadCareData();
   }, [user]);
 
@@ -93,38 +105,203 @@ const Dashboard = ({
     if (isAlerting && countdown > 0) {
       timer = setTimeout(() => setCountdown((value) => value - 1), 1000);
     } else if (isAlerting && countdown === 0) {
-      setIsAlerting(false);
-      setCountdown(10);
+      triggerSOS();
     }
     return () => clearTimeout(timer);
   }, [isAlerting, countdown]);
 
-  if (!user?.email) {
-    return (
-      <main className="page-shell grid place-items-center px-4">
-        <Card className="p-8 text-center">
-          <p className="text-lg font-semibold text-slate-900">Loading your dashboard...</p>
-        </Card>
-      </main>
-    );
-  }
+  const triggerSOS = () => {
+    setIsAlerting(false);
+    setCountdown(10);
+    
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          sendSOSRequest(latitude, longitude);
+        },
+        async (err) => {
+          console.warn('Geolocation denied or failed. Sending SOS without coordinates.');
+          sendSOSRequest(null, null);
+        }
+      );
+    } else {
+      sendSOSRequest(null, null);
+    }
+  };
 
-  const effectiveMedicines = (careData.medications?.length ? careData.medications : medicines || []).map((med) => ({ ...med, times: med.times || [] }));
-  const effectiveAppointments = (careData.appointments?.length ? careData.appointments : appointments || []).map((appointment) => ({
-    ...appointment,
-    date: appointment.date || appointment.appointmentDate,
-  }));
+  const sendSOSRequest = async (latitude, longitude) => {
+    try {
+      const response = await apiRequest('/health/sos', {
+        method: 'POST',
+        body: JSON.stringify({ latitude, longitude })
+      });
+      setSosSuccess(`Smart SOS alert dispatched to emergency contact ${response.contactName}!`);
+      setTimeout(() => setSosSuccess(''), 6000);
+      loadCareData();
+    } catch (err) {
+      alert(err.message || 'Failed to dispatch SOS alerts. Call emergency services directly!');
+    }
+  };
+
+  const handleAddMedicine = async (medInfo) => {
+    try {
+      await apiRequest('/health/medications', {
+        method: 'POST',
+        body: JSON.stringify(medInfo),
+      });
+      loadCareData();
+    } catch (err) {
+      alert(err.message || 'Failed to add medication.');
+    }
+  };
+
+  const handleDeleteMedicine = async (medId) => {
+    if (!window.confirm('Are you sure you want to remove this medication schedule?')) return;
+    try {
+      await apiRequest(`/health/medications/${medId}`, {
+        method: 'DELETE',
+      });
+      loadCareData();
+    } catch (err) {
+      alert(err.message || 'Failed to delete medication.');
+    }
+  };
+
+  const handleTakeDose = async (medId, timeSlot) => {
+    try {
+      await apiRequest(`/health/medications/${medId}/take`, {
+        method: 'POST',
+        body: JSON.stringify({ timeSlot })
+      });
+      loadCareData();
+    } catch (err) {
+      alert(err.message || 'Failed to record dose intake.');
+    }
+  };
+
+  const handleRefillMed = async (medId) => {
+    const amount = window.prompt('Enter number of pills to add (default is 30):', '30');
+    if (amount === null) return; // cancelled
+    try {
+      await apiRequest(`/health/medications/${medId}/refill`, {
+        method: 'POST',
+        body: JSON.stringify({ refillAmount: parseInt(amount, 10) || 30 })
+      });
+      loadCareData();
+    } catch (err) {
+      alert(err.message || 'Refill failed.');
+    }
+  };
+
+  const handleAddAppointment = async (aptInfo) => {
+    try {
+      await apiRequest('/health/appointments', {
+        method: 'POST',
+        body: JSON.stringify(aptInfo),
+      });
+      loadCareData();
+    } catch (err) {
+      alert(err.message || 'Failed to schedule appointment.');
+    }
+  };
+
+  const handleDeleteAppointment = async (aptId) => {
+    if (!window.confirm('Cancel this scheduled appointment reminder?')) return;
+    try {
+      await apiRequest(`/health/appointments/${aptId}`, {
+        method: 'DELETE',
+      });
+      loadCareData();
+    } catch (err) {
+      alert(err.message || 'Failed to cancel appointment.');
+    }
+  };
+
+  const handleSaveAppointmentSummary = async (summaryObj) => {
+    try {
+      await apiRequest('/health/records', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'summary',
+          title: `AI prep: ${summaryObj.doctorName}`,
+          summary: summaryObj.summary,
+        })
+      });
+      loadCareData();
+    } catch (err) {
+      alert(err.message || 'Failed to save summary.');
+    }
+  };
+
+  const handleVitalsSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await apiRequest('/health/profile/vitals', {
+        method: 'POST',
+        body: JSON.stringify(vitalsInput)
+      });
+      setShowVitalsForm(false);
+      setVitalsInput({ weight: '', height: '', heartRate: '', bloodPressure: '', temperature: '', oxygenSaturation: '' });
+      loadCareData();
+    } catch (err) {
+      alert(err.message || 'Failed to update vitals.');
+    }
+  };
+
+  const handleAddFamilyMember = async (e) => {
+    e.preventDefault();
+    try {
+      const currentFamily = careData.profile?.familyMembers || [];
+      const updatedFamily = [...currentFamily, familyInput];
+      
+      await apiRequest('/health/profile', {
+        method: 'POST',
+        body: JSON.stringify({ familyMembers: updatedFamily })
+      });
+      
+      setShowFamilyForm(false);
+      setFamilyInput({ name: '', relationship: 'spouse', phone: '' });
+      loadCareData();
+    } catch (err) {
+      alert(err.message || 'Failed to save family profile contact.');
+    }
+  };
+
+  const handleRemoveFamilyMember = async (index) => {
+    if (!window.confirm('Remove this family profile from coordinates?')) return;
+    try {
+      const updatedFamily = careData.profile.familyMembers.filter((_, i) => i !== index);
+      await apiRequest('/health/profile', {
+        method: 'POST',
+        body: JSON.stringify({ familyMembers: updatedFamily })
+      });
+      loadCareData();
+    } catch (err) {
+      alert(err.message || 'Failed to remove.');
+    }
+  };
+
+  const copyAccessCode = () => {
+    if (!careData.profile?.accessCode) return;
+    navigator.clipboard.writeText(careData.profile.accessCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  // Computation logic
+  const effectiveMedicines = careData.medications || [];
+  const effectiveAppointments = careData.appointments || [];
 
   const getTodaysMedicines = () => {
-    const today = new Date().toDateString();
-    return effectiveMedicines.filter((med) => new Date(med.startDate || Date.now()).toDateString() <= today);
+    return effectiveMedicines.filter((med) => med.active !== false);
   };
 
   const getUpcomingMedicine = () => {
     const now = new Date();
     const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     for (const med of getTodaysMedicines()) {
-      for (const time of med.times) {
+      for (const time of med.times || []) {
         if (time > currentTime) return { medicine: med, time };
       }
     }
@@ -133,7 +310,7 @@ const Dashboard = ({
 
   const getUpcomingAppointment = () => {
     const today = new Date().toDateString();
-    return effectiveAppointments
+    return [...effectiveAppointments]
       .filter((apt) => apt.date && new Date(apt.date).toDateString() >= today)
       .sort((a, b) => new Date(`${a.date} ${a.time}`).getTime() - new Date(`${b.date} ${b.time}`).getTime())[0];
   };
@@ -148,7 +325,7 @@ const Dashboard = ({
 
   return (
     <>
-      <SuccessNotification show={showNotification} message={`Welcome to Helio, ${firstName}!`} />
+      <SuccessNotification show={showNotification} message={`Welcome back, ${firstName}!`} />
 
       <main className="page-shell">
         <header className="nav-glass">
@@ -158,7 +335,11 @@ const Dashboard = ({
               <IconButton label="Home" onClick={onGoHome}><Home className="h-5 w-5" /></IconButton>
               <IconButton label="Medical records" onClick={() => setShowMedicalRecords(true)}><FileText className="h-5 w-5" /></IconButton>
               <IconButton label="About Helio" onClick={() => setShowAboutModal(true)}><Info className="h-5 w-5" /></IconButton>
-              <button onClick={() => setShowProfileModal(true)} className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 font-semibold text-white shadow-[var(--shadow-glow)]" aria-label="Open profile">
+              <button 
+                onClick={() => setShowProfileModal(true)} 
+                className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-emerald-700 to-teal-700 font-bold text-white shadow-[var(--shadow-glow)] hover:scale-105 transition-transform" 
+                aria-label="Open profile"
+              >
                 {firstLetter}
               </button>
             </div>
@@ -166,195 +347,415 @@ const Dashboard = ({
         </header>
 
         <div className="content-shell py-6 sm:py-8">
+          {sosSuccess && (
+            <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800 font-semibold shadow-lg animate-bounce flex items-center gap-3">
+              <AlertTriangle className="h-6 w-6 text-red-600 animate-pulse" />
+              <span>{sosSuccess}</span>
+            </div>
+          )}
+
+          {/* Greeting Widget with Copy Action */}
           <Card className="overflow-hidden p-6 sm:p-8">
             <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-end">
               <div>
                 <p className="section-kicker mb-4">
-                  <Sparkles className="mr-2 h-3.5 w-3.5" />
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5 text-emerald-700" />
                   Personalized care concierge
                 </p>
-                <h1 className="text-balance text-3xl font-semibold leading-tight text-slate-950 sm:text-5xl">
-                  Welcome back, {firstName}. Your care plan is steady today.
+                <h1 className="text-balance text-3xl font-extrabold leading-tight text-slate-900 sm:text-5xl tracking-tight">
+                  Welcome back, {firstName}. Your care space is active.
                 </h1>
-                <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">
-                  {careError || 'Your medications, upcoming visits, care records, and AI insights are organized for a calmer day.'}
-                </p>
-              </div>
-              <div className="rounded-[var(--radius-xl)] bg-slate-950 p-5 text-white">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Health score</p>
-                <div className="mt-2 flex items-end gap-2">
-                  <span className="text-5xl font-semibold">{healthScore}</span>
-                  <span className="pb-2 text-lg text-slate-300">%</span>
+                <div className="mt-4 flex flex-wrap items-center gap-2 text-slate-600 text-sm sm:text-base leading-relaxed">
+                  <span>{careError || `Provide your clinician with Access Code:`}</span>
+                  <button 
+                    onClick={copyAccessCode}
+                    className="inline-flex items-center gap-1.5 font-mono bg-emerald-50 text-emerald-800 px-3 py-1 rounded-xl border border-emerald-100 font-bold hover:bg-emerald-100 transition-colors"
+                    title="Click to copy code"
+                  >
+                    {careData.profile?.accessCode || 'Generating...'}
+                    {copiedCode ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-emerald-600" />}
+                  </button>
+                  <span>for instant synchronization.</span>
                 </div>
-                <div className="mt-4 h-2 rounded-full bg-white/10">
+              </div>
+              <div className="rounded-[var(--radius-xl)] bg-slate-950 p-6 text-white shadow-lg border border-white/5 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-full blur-lg" />
+                <div className="flex justify-between items-center relative z-10">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">Adherence Score</p>
+                  <TrendingUp className="h-4 w-4 text-emerald-400" />
+                </div>
+                <div className="mt-2 flex items-end gap-1 relative z-10">
+                  <span className="text-5xl font-extrabold">{healthScore}</span>
+                  <span className="pb-1 text-lg text-slate-300">%</span>
+                </div>
+                <div className="mt-4 h-2 rounded-full bg-white/10 relative z-10">
                   <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-sky-400" style={{ width: `${Math.min(healthScore, 100)}%` }} />
                 </div>
-                <p className="mt-3 text-sm text-slate-300">{isLoadingCareData ? 'Refreshing your care snapshot...' : 'Consistency is trending up this week.'}</p>
+                <p className="mt-3 text-[10px] text-slate-400 relative z-10">
+                  {isLoadingCareData ? 'Refreshing indicators...' : 'Calculated based on daily medication logs.'}
+                </p>
               </div>
             </div>
           </Card>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <StatCard icon={Pill} label="Today's medicines" value={todaysMedicines.length} detail={upcomingMedicine ? `Next at ${upcomingMedicine.time}` : 'No dose remaining today'} />
-            <StatCard icon={Calendar} label="Appointments" value={effectiveAppointments.length} detail={upcomingAppointment ? `${upcomingAppointment.doctorName} is next` : 'No upcoming reminder'} tone="appointment" />
-            <StatCard icon={Bell} label="Next reminder" value={upcomingMedicine?.time || upcomingAppointment?.time || 'Clear'} detail="Prioritized from your care schedule" tone="ai" />
+          {/* Vitals Overview */}
+          <section className="mt-10">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2 tracking-tight">
+                <HeartPulse className="h-6 w-6 text-emerald-600" />
+                Clinical Vitals Tracker
+              </h2>
+              <Button size="sm" variant="secondary" onClick={() => setShowVitalsForm(!showVitalsForm)}>
+                {showVitalsForm ? 'Hide Form' : 'Log New Vitals'}
+              </Button>
+            </div>
+
+            {showVitalsForm && (
+              <Card className="p-6 mb-6 animate-rise-in max-w-2xl border-slate-200">
+                <form onSubmit={handleVitalsSubmit} className="space-y-4">
+                  <div className="grid gap-4 grid-cols-2 sm:grid-cols-3">
+                    <Field label="Weight (kg)">
+                      <input className="input-field" type="number" step="0.1" value={vitalsInput.weight} onChange={(e) => setVitalsInput({ ...vitalsInput, weight: e.target.value })} placeholder="72.5" />
+                    </Field>
+                    <Field label="Height (cm)">
+                      <input className="input-field" type="number" value={vitalsInput.height} onChange={(e) => setVitalsInput({ ...vitalsInput, height: e.target.value })} placeholder="178" />
+                    </Field>
+                    <Field label="Heart Rate (bpm)">
+                      <input className="input-field" type="number" value={vitalsInput.heartRate} onChange={(e) => setVitalsInput({ ...vitalsInput, heartRate: e.target.value })} placeholder="72" />
+                    </Field>
+                    <Field label="Blood Pressure">
+                      <input className="input-field" type="text" value={vitalsInput.bloodPressure} onChange={(e) => setVitalsInput({ ...vitalsInput, bloodPressure: e.target.value })} placeholder="120/80" />
+                    </Field>
+                    <Field label="Temperature (°C)">
+                      <input className="input-field" type="number" step="0.1" value={vitalsInput.temperature} onChange={(e) => setVitalsInput({ ...vitalsInput, temperature: e.target.value })} placeholder="36.6" />
+                    </Field>
+                    <Field label="SpO2 (%)">
+                      <input className="input-field" type="number" value={vitalsInput.oxygenSaturation} onChange={(e) => setVitalsInput({ ...vitalsInput, oxygenSaturation: e.target.value })} placeholder="98" />
+                    </Field>
+                  </div>
+                  <div className="flex gap-2 justify-end pt-2">
+                    <Button variant="ghost" size="sm" type="button" onClick={() => setShowVitalsForm(false)}>Cancel</Button>
+                    <Button size="sm" type="submit">Save Log</Button>
+                  </div>
+                </form>
+              </Card>
+            )}
+
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-6">
+              {[
+                { label: 'Heart Rate', value: careData.profile?.vitals?.heartRate ? `${careData.profile.vitals.heartRate} bpm` : 'N/A', detail: 'Normal: 60-100' },
+                { label: 'Blood Pressure', value: careData.profile?.vitals?.bloodPressure || 'N/A', detail: 'Systolic/Diastolic' },
+                { label: 'Oxygen Level', value: careData.profile?.vitals?.oxygenSaturation ? `${careData.profile.vitals.oxygenSaturation}%` : 'N/A', detail: 'Optimal: 95-100%' },
+                { label: 'Temperature', value: careData.profile?.vitals?.temperature ? `${careData.profile.vitals.temperature}°C` : 'N/A', detail: 'Normal: 36-37.2' },
+                { label: 'Weight', value: careData.profile?.vitals?.weight ? `${careData.profile.vitals.weight} kg` : 'N/A', detail: 'Latest logged' },
+                { label: 'Height', value: careData.profile?.vitals?.height ? `${careData.profile.vitals.height} cm` : 'N/A', detail: 'Stature' },
+              ].map((vital) => (
+                <Card key={vital.label} className="p-4 border-slate-100 hover:scale-[1.02] transition-transform shadow-sm">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">{vital.label}</span>
+                  <p className="mt-2 text-xl font-bold text-slate-800">{vital.value}</p>
+                  <p className="mt-1.5 text-[9px] text-slate-400 font-medium">{vital.detail}</p>
+                </Card>
+              ))}
+            </div>
+          </section>
+
+          {/* Quick Metrics Cards */}
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            <StatCard icon={Pill} label="Today's routine" value={todaysMedicines.length} detail={upcomingMedicine ? `Next: ${upcomingMedicine.medicine.name} at ${upcomingMedicine.time}` : 'Doses complete for today'} tone="primary" />
+            <StatCard icon={Calendar} label="Consultations" value={effectiveAppointments.length} detail={upcomingAppointment ? `${upcomingAppointment.doctorName} next` : 'No upcoming visits'} tone="appointment" />
+            <StatCard icon={Bell} label="Clinical Dispatches" value={careData.notes?.length || 0} detail="Bulletins from care team" tone="ai" />
           </div>
 
-          <div className="mt-8 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-            <Card className="overflow-hidden">
-              <div className="flex flex-col gap-4 border-b border-emerald-100 bg-emerald-50/70 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-                <SectionHeader title="Medicine reminders" description="Daily doses, timing, and allergy-aware medication context." />
-                <Button onClick={() => setShowMedicineModal(true)}><Plus className="h-5 w-5" /> Add medicine</Button>
+          <div className="mt-10 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+            
+            {/* Medicine Vault with Checklist */}
+            <Card className="overflow-hidden border-slate-200">
+              <div className="flex flex-col gap-4 border-b border-emerald-100 bg-emerald-50/50 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <SectionHeader title="Active Dosing Plan" description="Record medicine intake to maintain adherence. Low stock alerts prompt refills." />
+                <Button onClick={() => setShowMedicineModal(true)} size="sm"><Plus className="h-4.5 w-4.5" /> Add Medicine</Button>
               </div>
               <div className="p-5 sm:p-6">
                 {todaysMedicines.length ? (
                   <div className="grid gap-4 md:grid-cols-2">
-                    {todaysMedicines.map((medicine) => (
-                      <article key={medicine._id || medicine.id} className="rounded-[var(--radius-lg)] border border-emerald-100 bg-white/80 p-5 shadow-sm">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-600 text-white">
-                            <Pill className="h-5 w-5" />
+                    {todaysMedicines.map((medicine) => {
+                      const isLowStock = (medicine.quantity !== undefined && medicine.quantity <= (medicine.refillThreshold || 5));
+                      return (
+                        <article key={medicine._id} className="rounded-2xl border border-slate-100 bg-slate-50/30 p-5 flex flex-col justify-between hover:border-emerald-100 transition-colors">
+                          <div>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-600 text-white shadow-sm">
+                                <Pill className="h-5 w-5" />
+                              </div>
+                              <IconButton label={`Remove ${medicine.name}`} onClick={() => handleDeleteMedicine(medicine._id)} className="h-8 w-8 rounded-lg border-0 hover:bg-red-50">
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </IconButton>
+                            </div>
+                            <h3 className="mt-4 font-bold text-slate-900 text-base leading-tight">{medicine.name}</h3>
+                            <p className="mt-1 text-xs text-slate-500">{medicine.dosage} • {medicine.frequency}</p>
+                            
+                            {/* Stock Indicator */}
+                            <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px]">
+                              <span className={isLowStock ? 'text-rose-600 font-bold' : 'text-slate-500'}>
+                                {medicine.quantity !== undefined ? `${medicine.quantity} pills in stock` : 'No stock tracked'}
+                              </span>
+                              <Button size="sm" variant="ghost" className="h-7 text-[10px] text-emerald-800 font-semibold px-2 hover:bg-emerald-50" onClick={() => handleRefillMed(medicine._id)}>
+                                Refill
+                              </Button>
+                            </div>
                           </div>
-                          <IconButton label={`Delete ${medicine.name}`} onClick={() => onDeleteMedicine(medicine._id || medicine.id)} className="h-9 w-9 rounded-xl">
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
-                          </IconButton>
-                        </div>
-                        <h3 className="mt-4 text-lg font-semibold text-slate-950">{medicine.name}</h3>
-                        <p className="mt-1 text-sm text-slate-600">{medicine.dosage} • {medicine.frequency}</p>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {medicine.times.map((time) => <span key={time} className="chip bg-emerald-50 text-emerald-800">{time}</span>)}
-                        </div>
-                      </article>
-                    ))}
+
+                          <div className="mt-4 pt-3 border-t border-slate-100">
+                            <p className="text-[10px] text-slate-400 mb-2 uppercase font-bold tracking-wider">Log taken slots:</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {(medicine.times || []).map((time) => (
+                                <button
+                                  key={time}
+                                  onClick={() => handleTakeDose(medicine._id, time)}
+                                  className="chip text-[11px] py-1 px-2.5 bg-emerald-50/50 text-emerald-800 border-emerald-100/50 font-semibold hover:bg-emerald-100/70 hover:scale-105 transition-all flex items-center gap-1"
+                                  title="Log taken"
+                                >
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                  <span>{time}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
                   </div>
                 ) : (
                   <EmptyState
                     icon={Pill}
-                    title="No medicines scheduled"
-                    description="Add your first medicine reminder to create a daily rhythm Helio can protect."
-                    action={<Button onClick={() => setShowMedicineModal(true)}>Add your first medicine</Button>}
+                    title="No active medicines"
+                    description="Log your daily prescriptions to construct your care schedule."
+                    action={<Button onClick={() => setShowMedicineModal(true)}>Log First Medicine</Button>}
                   />
                 )}
               </div>
             </Card>
 
-            <Card className="overflow-hidden">
-              <div className="flex flex-col gap-4 border-b border-sky-100 bg-sky-50/70 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-                <SectionHeader title="Appointment reminders" description="Upcoming visits and preparation notes." />
-                <Button onClick={() => setShowAppointmentModal(true)}><Plus className="h-5 w-5" /> Set reminder</Button>
+            {/* Appointment Reminders */}
+            <Card className="overflow-hidden border-slate-200">
+              <div className="flex flex-col gap-4 border-b border-sky-100 bg-sky-50/40 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <SectionHeader title="Consultations & Calendars" description="View upcoming physician appointments or run AI summaries." />
+                <Button onClick={() => setShowAppointmentModal(true)} size="sm"><Plus className="h-4.5 w-4.5" /> Book Visit</Button>
               </div>
               <div className="p-5 sm:p-6">
                 {effectiveAppointments.length ? (
                   <div className="space-y-4">
                     {effectiveAppointments.map((appointment) => (
-                      <article key={appointment._id || appointment.id} className="rounded-[var(--radius-lg)] border border-sky-100 bg-white/80 p-5 shadow-sm">
+                      <article key={appointment._id} className="rounded-2xl border border-slate-100 bg-slate-50/20 p-5 flex flex-col hover:border-sky-200 transition-colors">
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <h3 className="text-lg font-semibold text-slate-950">{appointment.doctorName}</h3>
-                            <p className="text-sm font-medium text-sky-700">{appointment.specialty}</p>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-slate-900 text-base leading-tight">{appointment.doctorName}</h3>
+                              {appointment.status && (
+                                <span className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${
+                                  appointment.status === 'completed'
+                                    ? 'bg-green-100 text-green-800'
+                                    : appointment.status === 'cancelled'
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {appointment.status}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs font-semibold text-sky-700 mt-0.5">{appointment.specialty}</p>
                           </div>
-                          <IconButton label={`Delete appointment with ${appointment.doctorName}`} onClick={() => onDeleteAppointment(appointment._id || appointment.id)} className="h-9 w-9 rounded-xl">
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
+                          <IconButton label="Cancel appointment" onClick={() => handleDeleteAppointment(appointment._id)} className="h-8 w-8 rounded-lg border-0 hover:bg-red-50">
+                            <Trash2 className="h-4 w-4 text-red-600" />
                           </IconButton>
                         </div>
-                        <div className="mt-4 space-y-2 text-sm text-slate-600">
-                          <p className="flex items-center gap-2"><Clock className="h-4 w-4" />{new Date(appointment.date).toLocaleDateString()} at {appointment.time}</p>
-                          <p className="flex items-center gap-2"><MapPin className="h-4 w-4" />{appointment.clinicAddress}</p>
+                        <div className="mt-4 space-y-2 text-xs text-slate-500">
+                          <p className="flex items-center gap-2 font-medium"><Clock className="h-3.5 w-3.5" />{new Date(appointment.date).toLocaleDateString()} at {appointment.time}</p>
+                          <p className="flex items-center gap-2 font-medium"><MapPin className="h-3.5 w-3.5" />{appointment.clinicAddress}</p>
+                          {appointment.notes && <p className="text-xs italic bg-white p-2.5 rounded-xl border border-slate-100 text-slate-600 mt-2">Prep instruction: {appointment.notes}</p>}
                         </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="mt-4"
-                          onClick={() => { setSelectedAppointment(appointment); setShowAppointmentSummary(true); }}
-                        >
-                          <Brain className="h-4 w-4" />
-                          AI summary
-                        </Button>
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="text-xs py-1.5"
+                            onClick={() => { setSelectedAppointment(appointment); setShowAppointmentSummary(true); }}
+                          >
+                            <Brain className="h-3.5 w-3.5 text-indigo-600" />
+                            AI prep advisor
+                          </Button>
+                        </div>
                       </article>
                     ))}
                   </div>
                 ) : (
                   <EmptyState
                     icon={Calendar}
-                    title="No appointments yet"
-                    description="Create a reminder for an upcoming visit so Helio can help you prepare."
-                    action={<Button onClick={() => setShowAppointmentModal(true)}>Set first reminder</Button>}
+                    title="No consultations scheduled"
+                    description="Book visits with physician offices to coordinate dates and prepare notes."
+                    action={<Button onClick={() => setShowAppointmentModal(true)}>Log Appointment</Button>}
                   />
                 )}
               </div>
             </Card>
           </div>
 
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
-            <Card className="p-6">
-              <div className="flex items-start justify-between">
+          {/* Timeline and Support Circle */}
+          <div className="mt-10 grid gap-6 md:grid-cols-2">
+            
+            {/* Timeline */}
+            <Card className="p-6 border-slate-200">
+              <div className="flex items-start justify-between mb-4">
                 <div>
-                  <p className="text-sm font-medium text-emerald-700">Care timeline</p>
-                  <h2 className="mt-1 text-xl font-semibold text-slate-950">Recovery and follow-up</h2>
+                  <span className="text-[10px] uppercase font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">Timeline</span>
+                  <h2 className="mt-2 text-lg font-bold text-slate-900">Encrypted Incident Logs</h2>
                 </div>
-                <Activity className="h-6 w-6 text-emerald-600" />
+                <Activity className="h-5 w-5 text-emerald-600" />
               </div>
-              <div className="mt-5 space-y-3">
-                {careData.records?.slice(0, 3).length ? careData.records.slice(0, 3).map((record) => (
-                  <div key={record._id} className="flex items-start justify-between gap-3 rounded-2xl bg-white/80 px-4 py-3">
+              <div className="mt-5 space-y-4 max-h-[350px] overflow-y-auto pr-1">
+                {careData.records?.length ? careData.records.map((record) => (
+                  <div key={record._id} className="relative pl-6 border-l border-slate-200 py-2">
+                    <div className="absolute -left-1 top-3 h-2.5 w-2.5 rounded-full bg-emerald-500" />
                     <div>
-                      <p className="font-semibold text-slate-900">{record.title}</p>
-                      <p className="text-sm text-slate-600">{record.summary}</p>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase">{new Date(record.date).toLocaleDateString()}</span>
+                      <p className="font-bold text-slate-800 text-xs mt-0.5">{record.title}</p>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed bg-slate-50/50 p-2.5 rounded-xl border border-slate-100">{record.summary}</p>
                     </div>
-                    <ChevronRight className="mt-1 h-4 w-4 text-slate-400" />
                   </div>
-                )) : <p className="text-sm text-slate-600">No health timeline entries yet.</p>}
+                )) : <p className="text-xs text-slate-500 text-center py-8">Your clinical timeline is empty. Add records to build logs.</p>}
               </div>
             </Card>
 
-            <Card className="p-6">
-              <div className="flex items-start justify-between">
+            {/* Support Circle (Family Profiles) */}
+            <Card className="p-6 border-slate-200">
+              <div className="flex items-start justify-between mb-4">
                 <div>
-                  <p className="text-sm font-medium text-sky-700">Care team</p>
-                  <h2 className="mt-1 text-xl font-semibold text-slate-950">Your support circle</h2>
+                  <span className="text-[10px] uppercase font-bold text-sky-800 bg-sky-50 px-2 py-0.5 rounded">Support Circle</span>
+                  <h2 className="mt-2 text-lg font-bold text-slate-900">Family Dispatch Profiles</h2>
                 </div>
-                <Users className="h-6 w-6 text-sky-600" />
+                <Users className="h-5 w-5 text-sky-600" />
               </div>
               <div className="mt-5 space-y-3">
                 {careData.profile?.familyMembers?.length ? careData.profile.familyMembers.map((member, index) => (
-                  <div key={`${member.name}-${index}`} className="rounded-2xl bg-white/80 px-4 py-3 text-sm text-slate-700">
-                    {member.name} • {member.relationship}
+                  <div key={`${member.name}-${index}`} className="flex justify-between items-center rounded-2xl bg-slate-50/50 border border-slate-100 px-4 py-3 shadow-sm text-xs">
+                    <div>
+                      <p className="font-bold text-slate-900">{member.name}</p>
+                      <p className="text-[10px] text-slate-500 capitalize">{member.relationship} • {member.phone}</p>
+                    </div>
+                    <IconButton label="Delete contact" onClick={() => handleRemoveFamilyMember(index)} className="h-7 w-7 text-red-500 border-0 hover:bg-red-50">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </IconButton>
                   </div>
-                )) : <p className="text-sm text-slate-600">Add family contacts for coordinated care.</p>}
+                )) : <p className="text-xs text-slate-500 text-center py-6">No emergency family profiles linked.</p>}
+                
+                {showFamilyForm ? (
+                  <form onSubmit={handleAddFamilyMember} className="bg-slate-50 p-4 rounded-2xl space-y-3 mt-4 border border-slate-200/60 animate-rise-in">
+                    <Field label="Full Name">
+                      <input className="input-field bg-white" type="text" value={familyInput.name} onChange={(e) => setFamilyInput({ ...familyInput, name: e.target.value })} placeholder="Alex Morgan" required />
+                    </Field>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label="Relationship">
+                        <select className="input-field bg-white" value={familyInput.relationship} onChange={(e) => setFamilyInput({ ...familyInput, relationship: e.target.value })}>
+                          <option value="spouse">Spouse</option>
+                          <option value="parent">Parent</option>
+                          <option value="child">Child</option>
+                          <option value="sibling">Sibling</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </Field>
+                      <Field label="Phone number">
+                        <input className="input-field bg-white" type="tel" value={familyInput.phone} onChange={(e) => setFamilyInput({ ...familyInput, phone: e.target.value })} placeholder="+1..." required />
+                      </Field>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button variant="ghost" size="sm" type="button" onClick={() => setShowFamilyForm(false)}>Cancel</Button>
+                      <Button size="sm" type="submit">Save contact</Button>
+                    </div>
+                  </form>
+                ) : (
+                  <Button variant="secondary" className="w-full mt-4 text-xs py-2" onClick={() => setShowFamilyForm(true)}>
+                    <Plus className="h-4 w-4" /> Add family member
+                  </Button>
+                )}
               </div>
             </Card>
           </div>
+
+          {/* Clinician Notes */}
+          <section className="mt-10">
+            <h2 className="text-2xl font-bold text-slate-900 mb-5 flex items-center gap-2 tracking-tight">
+              <FileText className="h-6 w-6 text-indigo-600" />
+              Direct Clinical Bulletins
+            </h2>
+            {careData.notes?.length ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {careData.notes.map((note) => (
+                  <Card key={note._id} className="p-5 border-l-4 border-l-indigo-600 bg-white/85 shadow-sm">
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-bold text-slate-900 text-sm leading-snug">{note.title}</h3>
+                      <span className="text-[9px] uppercase font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{note.category}</span>
+                    </div>
+                    <p className="mt-3 text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                    <div className="mt-4 border-t border-slate-100 pt-2 text-[9px] text-slate-400 font-semibold">
+                      Published on {new Date(note.createdAt).toLocaleDateString()}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card className="p-8 text-center text-xs text-slate-500 border-slate-200">
+                No clinical bulletins published by linked physicians yet.
+              </Card>
+            )}
+          </section>
         </div>
       </main>
 
+      {/* Floating Action Bars */}
       {isAlerting ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
-          <Card className="max-w-sm p-8 text-center">
-            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-red-50 text-5xl font-semibold text-red-600">{countdown}</div>
-            <h2 className="mt-5 text-2xl font-semibold text-slate-950">Emergency alert sending</h2>
-            <p className="mt-2 text-sm text-slate-600">Cancel if this was accidental.</p>
-            <Button variant="secondary" className="mt-6 w-full" onClick={() => { setIsAlerting(false); setCountdown(10); }}>Cancel alert</Button>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 p-4 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true">
+          <Card className="max-w-sm w-full p-8 text-center border-red-200 shadow-2xl bg-white/95">
+            <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-red-50 text-5xl font-bold text-red-600 animate-pulse">{countdown}</div>
+            <h2 className="mt-5 text-2xl font-bold text-slate-900 tracking-tight">Emergency SOS Dispatching</h2>
+            <p className="mt-2 text-xs text-slate-500 leading-relaxed">Sending real-time coordinates and medical information to emergency circles and clinical assistants.</p>
+            <Button variant="danger" className="mt-6 w-full" onClick={() => { setIsAlerting(false); setCountdown(10); }}>Cancel Alert</Button>
           </Card>
         </div>
       ) : (
         <div className="fixed bottom-5 right-5 z-40 flex flex-col gap-3">
-          <IconButton label="Start emergency alert" onClick={() => { setIsAlerting(true); setCountdown(10); }} className="border-red-200 bg-red-600 text-white hover:bg-red-700 hover:text-white">
+          <button 
+            onClick={() => { setIsAlerting(true); setCountdown(10); }} 
+            className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-red-600 text-white shadow-lg hover:bg-red-700 hover:scale-105 active:scale-95 transition-all outline-none focus-visible:ring-4 focus-visible:ring-red-100"
+            title="Trigger emergency alert"
+            aria-label="SOS panic"
+          >
             <Shield className="h-5 w-5" />
-          </IconButton>
-          <IconButton label="Open AI assistant" onClick={() => setShowChatBot(true)} className="bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white">
+          </button>
+          <button 
+            onClick={() => setShowChatBot(true)} 
+            className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-emerald-600 text-white shadow-lg hover:bg-emerald-700 hover:scale-105 active:scale-95 transition-all outline-none focus-visible:ring-4 focus-visible:ring-emerald-100"
+            title="Open AI health assistant"
+            aria-label="Chat with assistant"
+          >
             <MessageCircle className="h-5 w-5" />
-          </IconButton>
+          </button>
         </div>
       )}
 
-      {showMedicineModal && <MedicineReminder onClose={() => setShowMedicineModal(false)} onAddMedicine={onAddMedicine} />}
-      {showAppointmentModal && <AppointmentBooking onClose={() => setShowAppointmentModal(false)} onAddAppointment={onAddAppointment} />}
-      {showProfileModal && <ProfileModal user={user} onClose={() => setShowProfileModal(false)} />}
-      {showChatBot && <ChatBot onClose={() => setShowChatBot(false)} user={user} medicines={medicines} appointments={appointments} />}
+      {showMedicineModal && <MedicineReminder onClose={() => setShowMedicineModal(false)} onAddMedicine={handleAddMedicine} />}
+      {showAppointmentModal && <AppointmentBooking onClose={() => setShowAppointmentModal(false)} onAddAppointment={handleAddAppointment} />}
+      {showProfileModal && <ProfileModal user={{ ...user, ...careData.profile }} onClose={() => setShowProfileModal(false)} onUpdateProfile={async (updatedProfile) => {
+        try {
+          await apiRequest('/health/profile', { method: 'POST', body: JSON.stringify(updatedProfile) });
+          loadCareData();
+        } catch(e) {
+          alert('Failed to update profile.');
+        }
+      }} />}
+      {showChatBot && <ChatBot onClose={() => setShowChatBot(false)} user={user} medicines={todaysMedicines} appointments={effectiveAppointments} />}
       {showAboutModal && <AboutModal onClose={() => setShowAboutModal(false)} />}
       {showMedicalRecords && <MedicalRecordsModal onClose={() => setShowMedicalRecords(false)} user={user} />}
       {showAppointmentSummary && selectedAppointment && (
-        <AppointmentSummaryModal onClose={() => { setShowAppointmentSummary(false); setSelectedAppointment(null); }} appointment={selectedAppointment} onSaveSummary={onSaveAppointmentSummary} />
+        <AppointmentSummaryModal onClose={() => { setShowAppointmentSummary(false); setSelectedAppointment(null); }} appointment={selectedAppointment} onSaveSummary={handleSaveAppointmentSummary} />
       )}
     </>
   );

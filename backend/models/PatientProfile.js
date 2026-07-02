@@ -41,6 +41,20 @@ const PatientProfileSchema = new mongoose.Schema(
       temperature: Number,
       oxygenSaturation: Number,
     },
+    vitalsHistory: [
+      {
+        weight: Number,
+        height: Number,
+        heartRate: Number,
+        bloodPressure: String,
+        temperature: Number,
+        oxygenSaturation: Number,
+        loggedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      }
+    ],
     healthScore: {
       type: Number,
       default: 84,
@@ -51,5 +65,29 @@ const PatientProfileSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Pre-save hook to generate unique accessCode if not present
+PatientProfileSchema.pre('save', async function (next) {
+  if (!this.accessCode) {
+    let unique = false;
+    let code = '';
+    while (!unique) {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let randomPart = '';
+      for (let i = 0; i < 6; i++) {
+        randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      code = `H-${randomPart}`;
+      
+      // Check uniqueness
+      const existing = await this.constructor.findOne({ accessCode: code });
+      if (!existing) {
+        unique = true;
+      }
+    }
+    this.accessCode = code;
+  }
+  next();
+});
 
 module.exports = mongoose.model('PatientProfile', PatientProfileSchema);

@@ -1,83 +1,47 @@
 const express = require('express');
-const router = express.Router();
+const healthController = require('../controllers/healthController');
 const { protect, checkRole } = require('../middleware/auth');
-const PatientProfile = require('../models/PatientProfile');
-const Medication = require('../models/Medication');
-const Appointment = require('../models/Appointment');
-const HealthRecord = require('../models/HealthRecord');
-const DoctorNote = require('../models/DoctorNote');
 
-router.get('/dashboard', protect, checkRole(['patient']), async (req, res) => {
-  try {
-    const profile = await PatientProfile.findOne({ userId: req.user._id }).lean();
-    const medications = await Medication.find({ userId: req.user._id }).sort({ createdAt: -1 }).lean();
-    const appointments = await Appointment.find({ userId: req.user._id }).sort({ date: 1 }).lean();
-    const records = await HealthRecord.find({ userId: req.user._id }).sort({ date: -1 }).lean();
-    const notes = await DoctorNote.find({ patientId: req.user._id }).sort({ createdAt: -1 }).lean();
+const router = express.Router();
 
-    res.json({
-      profile: profile || {},
-      medications,
-      appointments,
-      records,
-      notes,
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Unable to load care dashboard.' });
-  }
-});
+// --- PATIENT HEALTH DASHBOARD ---
+router.get('/dashboard', protect, checkRole(['patient']), healthController.getPatientDashboard);
 
-router.post('/profile', protect, checkRole(['patient']), async (req, res) => {
-  try {
-    const update = {
-      userId: req.user._id,
-      ...req.body,
-    };
-    const profile = await PatientProfile.findOneAndUpdate({ userId: req.user._id }, update, {
-      upsert: true,
-      new: true,
-      setDefaultsOnInsert: true,
-    });
-    res.json(profile);
-  } catch (error) {
-    res.status(500).json({ message: 'Unable to save profile.' });
-  }
-});
+// --- PROFILE EDIT & VITALS ---
+router.post('/profile', protect, checkRole(['patient']), healthController.postProfile);
+router.post('/profile/vitals', protect, checkRole(['patient']), healthController.postVitals);
 
-router.post('/medications', protect, checkRole(['patient']), async (req, res) => {
-  try {
-    const medication = await Medication.create({ userId: req.user._id, ...req.body });
-    res.status(201).json(medication);
-  } catch (error) {
-    res.status(500).json({ message: 'Unable to save medication.' });
-  }
-});
+// --- MEDICATION MANAGEMENT ---
+router.post('/medications', protect, checkRole(['patient']), healthController.postMedications);
+router.delete('/medications/:id', protect, checkRole(['patient']), healthController.deleteMedications);
+router.post('/medications/:id/take', protect, checkRole(['patient']), healthController.postTakeDose);
+router.post('/medications/:id/refill', protect, checkRole(['patient']), healthController.postRefillMed);
 
-router.post('/appointments', protect, checkRole(['patient']), async (req, res) => {
-  try {
-    const appointment = await Appointment.create({ userId: req.user._id, ...req.body });
-    res.status(201).json(appointment);
-  } catch (error) {
-    res.status(500).json({ message: 'Unable to save appointment.' });
-  }
-});
+// --- APPOINTMENT MANAGEMENT ---
+router.post('/appointments', protect, checkRole(['patient']), healthController.postAppointments);
+router.delete('/appointments/:id', protect, checkRole(['patient']), healthController.deleteAppointments);
+router.put('/appointments/:id/status', protect, checkRole(['doctor']), healthController.putAppointmentStatus);
 
-router.post('/records', protect, checkRole(['patient']), async (req, res) => {
-  try {
-    const record = await HealthRecord.create({ userId: req.user._id, ...req.body });
-    res.status(201).json(record);
-  } catch (error) {
-    res.status(500).json({ message: 'Unable to save health record.' });
-  }
-});
+// --- DIGITAL RECORDS ---
+router.post('/records', protect, checkRole(['patient']), healthController.postRecords);
+router.delete('/records/:id', protect, checkRole(['patient']), healthController.deleteRecords);
 
-router.get('/doctor-dashboard', protect, checkRole(['doctor']), async (req, res) => {
-  try {
-    const patients = await PatientProfile.find({ doctorAccess: req.user._id }).lean();
-    res.json({ patients });
-  } catch (error) {
-    res.status(500).json({ message: 'Unable to load doctor dashboard.' });
-  }
-});
+// --- AI COMPANION & OCR prescrip ---
+router.post('/ai-chat', protect, checkRole(['patient']), healthController.postAIChat);
+router.post('/ocr', protect, checkRole(['patient']), healthController.postOCR);
+
+// --- EMERGENCY SOS DISPATCH ---
+router.post('/sos', protect, checkRole(['patient']), healthController.postSOS);
+
+// --- DOCTOR LINKING & ACCESS ---
+router.post('/doctor/link-patient', protect, checkRole(['doctor']), healthController.postDoctorLinkPatient);
+router.get('/doctor-dashboard', protect, checkRole(['doctor']), healthController.getDoctorDashboard);
+router.get('/doctor/patient-details/:id', protect, checkRole(['doctor']), healthController.getDoctorPatientDetails);
+router.post('/doctor/notes', protect, checkRole(['doctor']), healthController.postDoctorNotes);
+
+// --- CONSENT ACCESS CONTROL ---
+router.get('/consent-requests', protect, checkRole(['patient']), healthController.getConsentRequests);
+router.post('/consent-approve', protect, checkRole(['patient']), healthController.postApproveConsent);
+router.post('/consent-revoke', protect, checkRole(['patient']), healthController.postRevokeConsent);
 
 module.exports = router;
