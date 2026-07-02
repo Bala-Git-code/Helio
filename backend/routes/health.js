@@ -14,6 +14,7 @@ router.post('/profile/vitals', protect, checkRole(['patient']), healthController
 // --- MEDICATION MANAGEMENT ---
 router.post('/medications', protect, checkRole(['patient']), healthController.postMedications);
 router.delete('/medications/:id', protect, checkRole(['patient']), healthController.deleteMedications);
+router.patch('/medications/:id/status', protect, checkRole(['patient']), healthController.patchMedicationStatus);
 router.post('/medications/:id/take', protect, checkRole(['patient']), healthController.postTakeDose);
 router.post('/medications/:id/refill', protect, checkRole(['patient']), healthController.postRefillMed);
 
@@ -26,7 +27,7 @@ router.put('/appointments/:id/status', protect, checkRole(['doctor']), healthCon
 router.post('/records', protect, checkRole(['patient']), healthController.postRecords);
 router.delete('/records/:id', protect, checkRole(['patient']), healthController.deleteRecords);
 
-// --- AI COMPANION & OCR prescrip ---
+// --- AI COMPANION & OCR ---
 router.post('/ai-chat', protect, checkRole(['patient']), healthController.postAIChat);
 router.post('/ocr', protect, checkRole(['patient']), healthController.postOCR);
 
@@ -43,5 +44,10 @@ router.post('/doctor/notes', protect, checkRole(['doctor']), healthController.po
 router.get('/consent-requests', protect, checkRole(['patient']), healthController.getConsentRequests);
 router.post('/consent-approve', protect, checkRole(['patient']), healthController.postApproveConsent);
 router.post('/consent-revoke', protect, checkRole(['patient']), healthController.postRevokeConsent);
+
+// --- SYSTEM NOTIFICATIONS ACCESS ---
+router.get('/notifications', protect, checkRole(['patient']), healthController.getNotifications);
+router.patch('/notifications/:id/read', protect, checkRole(['patient']), healthController.patchMarkNotificationRead);
+router.delete('/notifications/:id', protect, checkRole(['patient']), healthController.deleteNotification);
 
 module.exports = router;

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { jwtDecode } from "jwt-decode"; // You need to install this: npm install jwt-decode
+import { jwtDecode } from "jwt-decode";
 import WelcomePage from './components/WelcomePage';
 import AuthPage from './components/AuthPage';
 import BasicInfoPage from './components/BasicInfoPage';
 import Dashboard from './components/Dashboard';
 import DoctorDashboard from './components/DoctorDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import OnboardingTour from './components/OnboardingTour';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('welcome');
@@ -13,20 +14,55 @@ function App() {
   const [medicines, setMedicines] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [appointmentSummaries, setAppointmentSummaries] = useState([]);
-
-  // 1. ADD A NEW STATE TO TRIGGER THE NOTIFICATION
+  
+  // App Notifications & Tours
   const [showLoginNotification, setShowLoginNotification] = useState(false);
+  const [showTour, setShowTour] = useState(false);
 
-  // 2. ADD THIS useEffect TO HANDLE THE GOOGLE REDIRECT
+  // 1. Session Restore on Application Mount
+  useEffect(() => {
+    const storedToken = localStorage.getItem('jwtToken');
+    if (storedToken) {
+      try {
+        const decodedToken = jwtDecode(storedToken);
+        const isExpired = decodedToken.exp * 1000 < Date.now();
+        
+        if (!isExpired) {
+          const userData = {
+            id: decodedToken.user.id,
+            role: decodedToken.user.role,
+            name: decodedToken.user.name || 'User',
+            email: decodedToken.user.email || 'No email',
+            userType: decodedToken.user.role
+          };
+          
+          setUser(userData);
+          
+          // Route based on role
+          if (userData.userType === 'doctor') {
+            setCurrentPage('doctorDashboard');
+          } else if (userData.userType === 'admin') {
+            setCurrentPage('adminDashboard');
+          } else {
+            setCurrentPage('dashboard');
+          }
+        } else {
+          localStorage.removeItem('jwtToken');
+        }
+      } catch (err) {
+        localStorage.removeItem('jwtToken');
+      }
+    }
+  }, []);
+
+  // 2. Google OAuth Redirect Handler
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
 
-    // If a token is found in the URL, it means we're coming from a Google login
     if (token) {
       localStorage.setItem('jwtToken', token);
       
-      // Decode the token to get user information
       const decodedToken = jwtDecode(token);
       const userData = {
         id: decodedToken.user.id,
@@ -36,13 +72,10 @@ function App() {
         userType: decodedToken.user.role
       };
 
-      // Call the success handler, treating it as an existing user and triggering the notification
       handleAuthSuccess(userData, false, true);
-
-      // Clean the URL by removing the token, so it doesn't get processed again
       window.history.replaceState(null, '', window.location.pathname);
     }
-  }, []); // The empty array [] ensures this runs only once when the app first loads
+  }, []);
 
   const handleGetStarted = () => {
     setCurrentPage('auth');
@@ -52,10 +85,9 @@ function App() {
     setCurrentPage('welcome');
   };
 
-  // 3. MODIFY handleAuthSuccess TO ACCEPT THE NOTIFICATION TRIGGER
   const handleAuthSuccess = (userData, isNewUser, showNotification = false) => {
     setUser(userData);
-    setShowLoginNotification(showNotification); // Set the state here
+    setShowLoginNotification(showNotification);
 
     if (userData.userType === 'doctor') {
       setCurrentPage('doctorDashboard');
@@ -74,6 +106,7 @@ function App() {
     if (user) {
       setUser({ ...user, ...basicInfo });
       setCurrentPage('dashboard');
+      setShowTour(true); // Launch guided tour on onboarding complete
     }
   };
 
@@ -104,36 +137,37 @@ function App() {
     setMedicines([]);
     setAppointments([]);
     setAppointmentSummaries([]);
+    setShowTour(false);
   };
 
   const handleUpdateUser = (updatedUser) => {
     setUser(updatedUser);
   };
   
-  // A new handler to dismiss the notification from the Dashboard
   const handleNotificationDismiss = () => {
       setShowLoginNotification(false);
-  }
+  };
 
   return (
     <div className="page-shell">
       {currentPage === 'welcome' && <WelcomePage onGetStarted={handleGetStarted} />}
       {currentPage === 'auth' && <AuthPage onAuthSuccess={handleAuthSuccess} />}
       {currentPage === 'basicInfo' && <BasicInfoPage onComplete={handleBasicInfoComplete} />}
+      
       {currentPage === 'doctorDashboard' && user && (
         <DoctorDashboard 
           user={user}
-          linkedPatientCode={user.linkedPatientCode}
           onLogout={handleLogout}
         />
       )}
+      
       {currentPage === 'adminDashboard' && user && (
         <AdminDashboard 
           user={user}
           onLogout={handleLogout}
         />
       )}
-      {/* 4. PASS THE NEW PROP AND HANDLER TO THE DASHBOARD */}
+      
       {currentPage === 'dashboard' && user && (
         <Dashboard 
           user={user} 
@@ -151,6 +185,9 @@ function App() {
           onNotificationDismiss={handleNotificationDismiss}
         />
       )}
+
+      {/* Guide tour overlay */}
+      {showTour && <OnboardingTour onClose={() => setShowTour(false)} />}
     </div>
   );
 }

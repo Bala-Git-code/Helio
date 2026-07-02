@@ -37,9 +37,18 @@ export const featureTone = {
 };
 
 export function BrandMark({ label = 'Helio', subtitle = 'Connected care, calmly managed', tone = 'primary' }) {
+  let resolvedTone = tone;
+  if (!featureTone[tone]) {
+    console.error(
+      `[BrandMark] Invalid tone value "${tone}" supplied. Falling back to "primary". Valid tones are: ${Object.keys(
+        featureTone
+      ).join(', ')}`
+    );
+    resolvedTone = 'primary';
+  }
   return (
     <div className="flex items-center gap-3">
-      <div className={cn('grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br text-white shadow-[var(--shadow-glow)]', featureTone[tone].icon)}>
+      <div className={cn('grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br text-white shadow-[var(--shadow-glow)]', featureTone[resolvedTone].icon)}>
         <Heart className="h-6 w-6" aria-hidden="true" />
       </div>
       <div>
