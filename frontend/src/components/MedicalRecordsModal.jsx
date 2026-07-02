@@ -1,9 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Upload, FileText, Image, Download, Trash2, Eye, Lock } from 'lucide-react';
+import { apiRequest } from '../utils/api';
 
 const MedicalRecordsModal = ({ onClose, user }) => {
   const [records, setRecords] = useState([]);
   const [dragActive, setDragActive] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const fetchRecords = async () => {
+    try {
+      setLoading(true);
+      const data = await apiRequest('/health/dashboard');
+      setRecords(data.records || []);
+    } catch (err) {
+      console.error('Failed to load records:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRecords();
+  }, []);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -29,24 +47,43 @@ const MedicalRecordsModal = ({ onClose, user }) => {
     handleFiles(files);
   };
 
-  const handleFiles = (files) => {
-    files.forEach(file => {
+  const handleFiles = async (files) => {
+    for (const file of files) {
       if (file.type === 'application/pdf' || file.type.startsWith('image/')) {
-        const newRecord = {
-          id: Date.now().toString() + Math.random(),
-          name: file.name,
-          type: file.type.includes('pdf') ? 'pdf' : 'jpg',
-          uploadDate: new Date().toISOString().split('T')[0],
-          size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
-          category: 'Uploaded Document'
-        };
-        setRecords(prev => [...prev, newRecord]);
+        try {
+          // In a real-world production app, we would upload to S3 or a file store.
+          // For this integration, we save the document metadata directly into the database HealthRecord.
+          await apiRequest('/health/records', {
+            method: 'POST',
+            body: JSON.stringify({
+              type: file.type.includes('pdf') ? 'lab' : 'prescription',
+              title: file.name,
+              summary: `Uploaded medical document (${(file.size / (1024 * 1024)).toFixed(1)} MB)`,
+              metadata: {
+                fileName: file.name,
+                fileSize: file.size,
+                mimeType: file.type
+              }
+            })
+          });
+          await fetchRecords();
+        } catch (err) {
+          alert(`Failed to save record ${file.name}: ${err.message}`);
+        }
       }
-    });
+    }
   };
 
-  const deleteRecord = (id) => {
-    setRecords(prev => prev.filter(record => record.id !== id));
+  const deleteRecord = async (id) => {
+    if (!window.confirm('Are you sure you want to permanently delete this medical record?')) return;
+    try {
+      await apiRequest(`/health/records/${id}`, {
+        method: 'DELETE'
+      });
+      await fetchRecords();
+    } catch (err) {
+      alert(`Failed to delete record: ${err.message}`);
+    }
   };
 
   const getFileIcon = (type) => {
@@ -122,35 +159,31 @@ const MedicalRecordsModal = ({ onClose, user }) => {
           {/* Records List */}
           <div className="space-y-4">
             <h3 className="text-xl font-bold text-gray-800 mb-4">Your Medical Records</h3>
-            {records.length > 0 ? (
+            {loading ? (
+              <p className="text-center py-6 text-slate-500">Loading records...</p>
+            ) : records.length > 0 ? (
               <div className="grid grid-cols-1 gap-4">
                 {records.map((record) => (
-                  <div key={record.id} className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200 hover:shadow-lg transition-all duration-300">
+                  <div key={record._id} className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-gray-200 hover:shadow-lg transition-all duration-300">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         <div className="bg-gray-100 p-3 rounded-xl">
-                          {getFileIcon(record.type)}
+                          {getFileIcon(record.metadata?.mimeType?.includes('pdf') ? 'pdf' : 'image')}
                         </div>
                         <div>
-                          <h4 className="font-bold text-gray-800 text-lg">{record.name}</h4>
+                          <h4 className="font-bold text-gray-800 text-lg">{record.title}</h4>
                           <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
-                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
-                              {record.category}
+                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium uppercase">
+                              {record.type}
                             </span>
-                            <span>Uploaded: {new Date(record.uploadDate).toLocaleDateString()}</span>
-                            <span>{record.size}</span>
+                            <span>Uploaded: {new Date(record.date || record.createdAt).toLocaleDateString()}</span>
+                            <span>{record.summary}</span>
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                          <Eye className="w-5 h-5" />
-                        </button>
-                        <button className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors">
-                          <Download className="w-5 h-5" />
-                        </button>
                         <button 
-                          onClick={() => deleteRecord(record.id)}
+                          onClick={() => deleteRecord(record._id)}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-5 h-5" />

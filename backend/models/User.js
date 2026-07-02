@@ -35,6 +35,7 @@ const UserSchema = new Schema(
     specialty: String,
     licenseNumber: String,
     department: String,
+    refreshTokens: [String],
   },
   { timestamps: true }
 );

@@ -17,6 +17,14 @@ const MedicationSchema = new mongoose.Schema(
     ingredients: String,
     notes: String,
     active: { type: Boolean, default: true },
+    quantity: { type: Number, default: 30 },
+    refillThreshold: { type: Number, default: 5 },
+    adherenceLogs: [
+      {
+        takenAt: { type: Date, default: Date.now },
+        timeSlot: String
+      }
+    ],
     adherence: {
       taken: { type: Number, default: 0 },
       target: { type: Number, default: 1 },

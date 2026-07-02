@@ -5,6 +5,7 @@ import AuthPage from './components/AuthPage';
 import BasicInfoPage from './components/BasicInfoPage';
 import Dashboard from './components/Dashboard';
 import DoctorDashboard from './components/DoctorDashboard';
+import AdminDashboard from './components/AdminDashboard';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('welcome');
@@ -30,9 +31,6 @@ function App() {
       const userData = {
         id: decodedToken.user.id,
         role: decodedToken.user.role,
-        // The name and email are not in the token, you might need to fetch them
-        // or add them to the token payload on your backend.
-        // For now, we'll use a placeholder.
         name: decodedToken.user.name || 'New User', 
         email: decodedToken.user.email || 'No email',
         userType: decodedToken.user.role
@@ -61,6 +59,8 @@ function App() {
 
     if (userData.userType === 'doctor') {
       setCurrentPage('doctorDashboard');
+    } else if (userData.userType === 'admin') {
+      setCurrentPage('adminDashboard');
     } else {
       if (isNewUser) {
         setCurrentPage('basicInfo');
@@ -98,6 +98,7 @@ function App() {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('jwtToken');
     setUser(null);
     setCurrentPage('welcome');
     setMedicines([]);
@@ -126,6 +127,12 @@ function App() {
           onLogout={handleLogout}
         />
       )}
+      {currentPage === 'adminDashboard' && user && (
+        <AdminDashboard 
+          user={user}
+          onLogout={handleLogout}
+        />
+      )}
       {/* 4. PASS THE NEW PROP AND HANDLER TO THE DASHBOARD */}
       {currentPage === 'dashboard' && user && (
         <Dashboard 
@@ -140,9 +147,7 @@ function App() {
           onDeleteAppointment={handleDeleteAppointment}
           onSaveAppointmentSummary={handleSaveAppointmentSummary}
           onGoHome={handleGoHome}
-          // Pass the notification trigger state
           showSuccessNotification={showLoginNotification}
-          // Pass the handler to allow the notification to be dismissed
           onNotificationDismiss={handleNotificationDismiss}
         />
       )}
