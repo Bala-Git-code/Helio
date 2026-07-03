@@ -39,4 +39,6 @@ const AccessPermissionSchema = new Schema(
   { timestamps: true }
 );
 
+AccessPermissionSchema.index({ patientId: 1, doctorId: 1, status: 1 });
+
 module.exports = mongoose.model('AccessPermission', AccessPermissionSchema);
