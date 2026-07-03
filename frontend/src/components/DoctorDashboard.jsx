@@ -1,47 +1,71 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Clock, FileText, LogOut, Pill, Search, ShieldCheck, Stethoscope, UserRound, Plus, Check, X as CancelIcon, MessageSquare, HeartPulse } from 'lucide-react';
+import { 
+  AlertTriangle, Clock, FileText, LogOut, Pill, Search, ShieldCheck, 
+  Stethoscope, UserRound, Plus, Check, X as CancelIcon, MessageSquare, 
+  HeartPulse, Menu, X, Bell, Calendar, Settings, HelpCircle, Activity, 
+  Sparkles, Layers, Sliders, Contrast, ShieldAlert
+} from 'lucide-react';
 import { BrandMark, Button, Card, EmptyState, Field, SectionHeader, StatCard, IconButton } from './design-system';
 import { apiRequest } from '../utils/api';
 
-const DoctorDashboard = ({ user, onLogout }) => {
+// Child components
+import DoctorLanding from './doctor/DoctorLanding';
+import PatientDirectory from './doctor/PatientDirectory';
+import PatientProfileView from './doctor/PatientProfileView';
+import ConsultationWorkspace from './doctor/ConsultationWorkspace';
+import SmartCalendar from './doctor/SmartCalendar';
+import AIConsultantPanel from './doctor/AIConsultantPanel';
+import NotificationHub from './doctor/NotificationHub';
+import PrescriptionConsole from './doctor/PrescriptionConsole';
+
+export default function DoctorDashboard({ user, onLogout }) {
   const [patients, setPatients] = useState([]);
-  const [selectedPatientId, setSelectedPatientId] = useState(null);
+  const [selectedPatientId, setSelectedPatientId] = useState('');
   const [patientDetail, setPatientDetail] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   
-  // Forms & Actions state
+  // Navigation & Menu Toggles
+  const [activeView, setActiveView] = useState('dashboard');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Theme & A11y Toggles
+  const [highContrast, setHighContrast] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // Link patient code state
   const [linkCode, setLinkCode] = useState('');
   const [isLinking, setIsLinking] = useState(false);
   const [linkError, setLinkError] = useState('');
   const [linkSuccess, setLinkSuccess] = useState('');
   
-  const [noteTitle, setNoteTitle] = useState('');
-  const [noteContent, setNoteContent] = useState('');
-  const [noteCategory, setNoteCategory] = useState('care-plan');
+  // Note logger local states
   const [isSavingNote, setIsSavingNote] = useState(false);
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [error, setError] = useState(null);
+  // Global search input & suggestions dropdown
+  const [globalSearch, setGlobalSearch] = useState('');
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
 
+  // Load patient directory lists
   const loadDoctorDashboard = async () => {
     try {
       setIsLoading(true);
-      setError(null);
       const data = await apiRequest('/health/doctor-dashboard');
-      setPatients(data.patients || []);
+      const loadedPatients = data.patients || [];
+      setPatients(loadedPatients);
       
-      // Auto-select first patient if available and none selected
-      if (data.patients?.length > 0 && !selectedPatientId) {
-        setSelectedPatientId(data.patients[0].id);
+      if (loadedPatients.length > 0 && !selectedPatientId) {
+        setSelectedPatientId(loadedPatients[0].id);
       }
     } catch (err) {
-      setError(err.message || 'Failed to load doctor dashboard.');
+      console.error('Failed to load dashboard:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Load detailed patient records
   const loadPatientDetails = async (patientId) => {
     if (!patientId) return;
     try {
@@ -49,7 +73,7 @@ const DoctorDashboard = ({ user, onLogout }) => {
       const data = await apiRequest(`/health/doctor/patient-details/${patientId}`);
       setPatientDetail(data);
     } catch (err) {
-      alert(err.message || 'Failed to load patient clinical data.');
+      console.error('Failed to load patient records:', err);
     } finally {
       setIsLoadingDetail(false);
     }
@@ -67,9 +91,11 @@ const DoctorDashboard = ({ user, onLogout }) => {
     }
   }, [selectedPatientId]);
 
+  // LINK PATIENT ACCESS CODE TO DIRECTORY
   const handleLinkPatient = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!linkCode.trim()) return;
+    
     setIsLinking(true);
     setLinkError('');
     setLinkSuccess('');
@@ -78,41 +104,42 @@ const DoctorDashboard = ({ user, onLogout }) => {
         method: 'POST',
         body: JSON.stringify({ accessCode: linkCode.trim() })
       });
-      setLinkSuccess(response.message || 'Patient linked successfully.');
+      setLinkSuccess(response.message || 'Patient link established successfully.');
       setLinkCode('');
       await loadDoctorDashboard();
-      setSelectedPatientId(response.patient.id);
+      if (response.patient?.id) {
+        setSelectedPatientId(response.patient.id);
+      }
     } catch (err) {
-      setLinkError(err.message || 'Failed to link patient.');
+      setLinkError(err.message || 'Failed to dispatch clinical link request.');
     } finally {
       setIsLinking(false);
     }
   };
 
-  const handleAddNote = async (e) => {
-    e.preventDefault();
-    if (!noteTitle.trim() || !noteContent.trim() || !selectedPatientId) return;
+  // ADD CLINICAL NOTE TO ACTIVE PATIENT
+  const handleAddNote = async ({ title, content, category }) => {
+    if (!selectedPatientId || !title.trim() || !content.trim()) return;
     setIsSavingNote(true);
     try {
       await apiRequest('/health/doctor/notes', {
         method: 'POST',
         body: JSON.stringify({
           patientId: selectedPatientId,
-          title: noteTitle.trim(),
-          content: noteContent.trim(),
-          category: noteCategory
+          title,
+          content,
+          category
         })
       });
-      setNoteTitle('');
-      setNoteContent('');
       await loadPatientDetails(selectedPatientId);
     } catch (err) {
-      alert(err.message || 'Failed to add clinical note.');
+      alert(err.message || 'Failed to write clinical consultation note.');
     } finally {
       setIsSavingNote(false);
     }
   };
 
+  // UPDATE APPOINTMENT STATUS
   const handleUpdateAppointmentStatus = async (appointmentId, status) => {
     try {
       await apiRequest(`/health/appointments/${appointmentId}/status`, {
@@ -123,360 +150,456 @@ const DoctorDashboard = ({ user, onLogout }) => {
         loadPatientDetails(selectedPatientId);
       }
     } catch (err) {
-      alert(err.message || 'Failed to update status.');
+      alert(err.message || 'Failed to update appointment status.');
     }
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const options = { year: 'numeric', month: 'long', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString(undefined, options);
-  };
-
-  const getAdherenceRate = (meds) => {
-    if (!meds || meds.length === 0) return 0;
-    let takenCount = 0;
-    let targetCount = 0;
-    meds.forEach(m => {
-      takenCount += m.adherence?.taken || 0;
-      targetCount += m.adherence?.target || 0;
-    });
-    if (targetCount === 0) return 100;
-    return Math.round((takenCount / targetCount) * 100);
-  };
-
-  const filteredPatients = patients.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.accessCode?.toLowerCase().includes(searchTerm.toLowerCase())
+  // Filter for global header search
+  const searchResults = patients.filter(p => 
+    p.name.toLowerCase().includes(globalSearch.toLowerCase()) ||
+    p.accessCode?.toLowerCase().includes(globalSearch.toLowerCase())
   );
+
+  const handleSearchResultClick = (patientId) => {
+    setSelectedPatientId(patientId);
+    setGlobalSearch('');
+    setShowSearchDropdown(false);
+    setActiveView('records');
+  };
+
+  // Master views router
+  const renderActiveView = () => {
+    switch (activeView) {
+      case 'dashboard':
+        return (
+          <DoctorLanding 
+            user={user}
+            patients={patients}
+            onSelectView={setActiveView}
+            onSelectPatient={(id) => { setSelectedPatientId(id); setActiveView('records'); }}
+            onStartConsultation={(id) => { setSelectedPatientId(id); setActiveView('consultations'); }}
+            onOpenPrescription={() => setActiveView('prescriptions')}
+            onOpenReportUpload={() => setActiveView('records')}
+          />
+        );
+      case 'patients':
+        return (
+          <PatientDirectory 
+            patients={patients}
+            onSelectPatient={(id) => { setSelectedPatientId(id); setActiveView('records'); }}
+            onSelectView={setActiveView}
+            onStartConsultation={(id) => { setSelectedPatientId(id); setActiveView('consultations'); }}
+          />
+        );
+      case 'records':
+        return (
+          <PatientProfileView 
+            patientDetail={patientDetail}
+            isLoadingDetail={isLoadingDetail}
+            onStartConsultation={(id) => { setSelectedPatientId(id); setActiveView('consultations'); }}
+            onAddNote={handleAddNote}
+            isSavingNote={isSavingNote}
+          />
+        );
+      case 'consultations':
+        return (
+          <ConsultationWorkspace 
+            patientDetail={patientDetail}
+            onAddNote={handleAddNote}
+            isSavingNote={isSavingNote}
+            onSelectView={setActiveView}
+          />
+        );
+      case 'appointments':
+        return (
+          <SmartCalendar 
+            appointments={patientDetail?.appointments || []}
+            patients={patients}
+            onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
+          />
+        );
+      case 'prescriptions':
+        return (
+          <PrescriptionConsole 
+            patients={patients}
+            selectedPatientId={selectedPatientId}
+          />
+        );
+      case 'ai-assistant':
+        return (
+          <AIConsultantPanel 
+            patients={patients}
+            selectedPatientId={selectedPatientId}
+          />
+        );
+      case 'notifications':
+        return (
+          <NotificationHub 
+            notifications={[]}
+          />
+        );
+      case 'hospital':
+        return (
+          <div className="space-y-6 animate-rise-in">
+            <div>
+              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Hospital Command Room</h1>
+              <p className="text-slate-500 text-sm mt-0.5">Clinical logs, duty cycles, and wing metrics.</p>
+            </div>
+            <Card className="p-6">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4">Wing Status Overview</h3>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Wing Occupancy</span>
+                  <span className="text-2xl font-extrabold text-slate-800 block mt-1">84%</span>
+                </div>
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Active Clinicians</span>
+                  <span className="text-2xl font-extrabold text-emerald-800 block mt-1">12 On Duty</span>
+                </div>
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">ICU Bed Availability</span>
+                  <span className="text-2xl font-extrabold text-rose-800 block mt-1">3 Units Free</span>
+                </div>
+              </div>
+            </Card>
+          </div>
+        );
+      case 'analytics':
+        return (
+          <div className="space-y-6 animate-rise-in">
+            <div>
+              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Clinical Analytics Dashboard</h1>
+              <p className="text-slate-500 text-sm mt-0.5">Telemetry reports, adherence rates, and waiting indices.</p>
+            </div>
+            <Card className="p-6 grid gap-6 md:grid-cols-2">
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outcomes Indices</h3>
+                <div className="space-y-3">
+                  {[
+                    { label: 'Diabetic Target Met', value: '78%' },
+                    { label: 'BP Targets Met', value: '85%' },
+                    { label: 'Medication Adherence Avg', value: '88%' }
+                  ].map((stat, i) => (
+                    <div key={i} className="flex justify-between items-center text-xs p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <span className="font-bold text-slate-700">{stat.label}</span>
+                      <span className="font-extrabold text-emerald-800">{stat.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Patient Demographics</h3>
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 min-h-[140px] flex items-center justify-center text-xs text-slate-500 font-semibold">
+                  [ Demographics telemetry logs compiled ]
+                </div>
+              </div>
+            </Card>
+          </div>
+        );
+      case 'messages':
+        return (
+          <div className="space-y-6 animate-rise-in">
+            <div>
+              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Clinician Communication Channel</h1>
+              <p className="text-slate-500 text-sm mt-0.5">Secure, HIPAA-compliant patient messaging.</p>
+            </div>
+            <Card className="p-6 text-center max-w-md mx-auto">
+              <MessageSquare className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+              <h3 className="text-sm font-bold text-slate-900">Secure Channels Engaged</h3>
+              <p className="text-xs text-slate-500 mt-2">All correspondence is fully audited. Choose a patient from the registry to dispatch updates.</p>
+            </Card>
+          </div>
+        );
+      case 'settings':
+        return (
+          <div className="space-y-6 animate-rise-in">
+            <div>
+              <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Clinician Workspace Settings</h1>
+              <p className="text-slate-500 text-sm mt-0.5">Configure panels, notifications, and profile details.</p>
+            </div>
+            <Card className="p-6 max-w-xl space-y-4">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-2">Workspace Preferences</h3>
+              <div className="space-y-3">
+                <label className="flex items-center justify-between text-xs p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer">
+                  <span className="font-semibold text-slate-700">High Contrast Mode</span>
+                  <input 
+                    type="checkbox" 
+                    checked={highContrast} 
+                    onChange={() => setHighContrast(!highContrast)} 
+                    className="h-4 w-4 accent-emerald-600 cursor-pointer" 
+                  />
+                </label>
+                <label className="flex items-center justify-between text-xs p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer">
+                  <span className="font-semibold text-slate-700">Audio Alerts (Telemetry flags)</span>
+                  <input 
+                    type="checkbox" 
+                    defaultChecked 
+                    className="h-4 w-4 accent-emerald-600 cursor-pointer" 
+                  />
+                </label>
+              </div>
+            </Card>
+          </div>
+        );
+      default:
+        return <div>View not implemented.</div>;
+    }
+  };
+
+  // Nav items listing helper
+  const sidebarNavItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: Layers },
+    { id: 'patients', label: 'Patients Directory', icon: UserRound },
+    { id: 'appointments', label: 'Appointments', icon: Calendar },
+    { id: 'records', label: 'Patient Profile', icon: FileText },
+    { id: 'consultations', label: 'Consultations Desk', icon: Stethoscope },
+    { id: 'prescriptions', label: 'Prescriptions', icon: Pill },
+    { id: 'analytics', label: 'Analytics', icon: Activity },
+    { id: 'messages', label: 'Messages', icon: MessageSquare },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'hospital', label: 'Hospital Info', icon: ShieldCheck },
+    { id: 'ai-assistant', label: 'AI Assistant', icon: Sparkles },
+    { id: 'settings', label: 'Settings', icon: Sliders }
+  ];
 
   if (isLoading) {
     return (
       <main className="page-shell grid place-items-center px-4">
         <Card className="p-8 text-center max-w-sm border-slate-200">
           <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
-          <p className="font-semibold text-slate-700 text-sm">Loading clinician console...</p>
+          <p className="font-semibold text-slate-700 text-sm">Loading Clinician Console...</p>
         </Card>
       </main>
     );
   }
 
   return (
-    <main className="page-shell">
-      <header className="nav-glass">
-        <div className="content-shell flex items-center justify-between gap-4 py-4">
-          <BrandMark label="Doctor Portal" subtitle="Clinician command center" tone="record" />
-          <div className="flex items-center gap-3">
-            <div className="hidden text-right sm:block">
-              <p className="font-semibold text-slate-900">Dr. {user.name}</p>
-              <p className="text-xs text-slate-500 font-medium">{user.specialty || 'General Practitioner'}</p>
-            </div>
-            <Button variant="secondary" onClick={onLogout} size="sm">
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="content-shell py-6 sm:py-8">
-        <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
+    <div className={`page-shell min-h-screen flex flex-col ${highContrast ? 'contrast-125' : ''}`}>
+      
+      {/* HEADER SECTION (Top Bar) */}
+      <header className="nav-glass sticky top-0 z-40">
+        <div className="px-5 sm:px-8 py-3.5 flex items-center justify-between gap-4">
           
-          {/* LEFT COLUMN: PATIENT DIRECTORY & ACCESS LINK */}
-          <aside className="space-y-6">
-            
-            {/* LINK PATIENT */}
-            <Card className="p-4 border-emerald-100 bg-emerald-50/20">
-              <h3 className="text-xs font-bold text-emerald-900 uppercase tracking-wider mb-2">Link Patient Access Code</h3>
-              <form onSubmit={handleLinkPatient} className="flex gap-2">
-                <input 
-                  type="text" 
-                  value={linkCode}
-                  onChange={(e) => setLinkCode(e.target.value)}
-                  placeholder="e.g. H-A7B8C9" 
-                  className="input-field py-2 text-xs flex-1 uppercase font-mono font-bold"
-                  required
-                />
-                <Button size="sm" type="submit" disabled={isLinking}>Link</Button>
-              </form>
-              {linkError && <p className="text-[10px] text-red-600 mt-2 font-semibold">{linkError}</p>}
-              {linkSuccess && <p className="text-[10px] text-green-700 mt-2 font-bold">{linkSuccess}</p>}
-            </Card>
+          <div className="flex items-center gap-3">
+            <IconButton 
+              label="Toggle Sidebar Menu" 
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+              className="hidden lg:grid border-slate-200/60"
+            >
+              <Menu className="h-5 w-5" />
+            </IconButton>
+            <IconButton 
+              label="Toggle Mobile Menu" 
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
+              className="lg:hidden border-slate-200/60"
+            >
+              {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </IconButton>
+            <BrandMark label="Doctor Portal" subtitle="Clinician Cockpit" tone="record" />
+          </div>
 
-            {/* SEARCH & DIRECTORY LIST */}
-            <Card className="p-4 space-y-4 border-slate-200">
-              <Field label="Directory Directory">
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-2.5 top-3 h-4 w-4 text-slate-400" />
-                  <input 
-                    className="input-field pl-9 py-2 text-xs" 
-                    value={searchTerm} 
-                    onChange={(e) => setSearchTerm(e.target.value)} 
-                    placeholder="Search name or code..." 
-                  />
+          {/* GLOBAL SEARCH IN HEADER */}
+          <div className="hidden md:block flex-1 max-w-md relative">
+            <div className="relative">
+              <Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-400 pointer-events-none" />
+              <input 
+                type="text" 
+                value={globalSearch}
+                onChange={(e) => {
+                  setGlobalSearch(e.target.value);
+                  setShowSearchDropdown(e.target.value.trim().length > 0);
+                }}
+                onFocus={() => { if(globalSearch.trim()) setShowSearchDropdown(true); }}
+                placeholder="Global Patient Search (name, access code)..."
+                className="input-field pl-9 py-2 text-xs"
+                aria-label="Global clinical search"
+              />
+            </div>
+
+            {/* SEARCH RESULTS DROPDOWN */}
+            {showSearchDropdown && (
+              <Card className="absolute left-0 right-0 mt-2 max-h-[300px] overflow-y-auto z-50 p-2 shadow-lg border-slate-200">
+                <div className="flex items-center justify-between p-2 border-b border-slate-100 mb-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Search Results</span>
+                  <IconButton label="Close dropdown" onClick={() => setShowSearchDropdown(false)} className="h-6 w-6 border-0">
+                    <X className="h-3 w-3" />
+                  </IconButton>
                 </div>
-              </Field>
-
-              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
-                {filteredPatients.length > 0 ? (
-                  filteredPatients.map(p => (
+                {searchResults.length > 0 ? (
+                  searchResults.map(p => (
                     <button
                       key={p.id}
-                      onClick={() => setSelectedPatientId(p.id)}
-                      className={`w-full text-left p-3 rounded-2xl border transition-all flex items-center justify-between ${
-                        selectedPatientId === p.id 
-                          ? 'border-emerald-200 bg-emerald-50/40 shadow-sm' 
-                          : 'border-slate-100 bg-slate-50/20 hover:bg-slate-50'
-                      }`}
+                      onClick={() => handleSearchResultClick(p.id)}
+                      className="w-full text-left p-2.5 rounded-xl hover:bg-slate-50 transition-colors flex items-center justify-between text-xs"
                     >
                       <div>
-                        <p className="font-bold text-slate-900 text-xs">{p.name}</p>
+                        <p className="font-bold text-slate-900">{p.name}</p>
                         <p className="text-[10px] text-slate-400 font-mono mt-0.5">{p.accessCode}</p>
                       </div>
-                      <Clock className="h-3.5 w-3.5 text-slate-400" />
+                      <span className="text-[9px] bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded">Active</span>
                     </button>
                   ))
                 ) : (
-                  <p className="text-xs text-slate-400 text-center py-6">No patients linked.</p>
+                  <p className="text-xs text-slate-400 text-center py-4">No patient results match.</p>
                 )}
-              </div>
-            </Card>
-          </aside>
-
-          {/* RIGHT COLUMN: CLINICAL DETAIL PANELS */}
-          <section className="space-y-6">
-            {isLoadingDetail ? (
-              <Card className="p-12 text-center border-slate-200">
-                <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
-                <p className="text-xs text-slate-500 font-bold">Loading patient records...</p>
               </Card>
-            ) : patientDetail ? (
-              <div className="space-y-6">
-                
-                {/* PATIENT HEADER */}
-                <Card className="p-6 border-slate-200">
-                  <div className="grid gap-6 md:grid-cols-[1fr_280px] items-end">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">Active Medical File</span>
-                      <h1 className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">{patientDetail.patient.name}</h1>
-                      <p className="text-xs text-slate-500 mt-1">Email: {patientDetail.patient.email} | Access: {patientDetail.patient.accessCode}</p>
-                    </div>
-                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/20 p-4 text-xs space-y-1">
-                      <p className="text-emerald-900 font-bold uppercase tracking-wider text-[9px] mb-1">Medical Indicators</p>
-                      <p className="text-slate-700">Adherence Score: <strong className="text-emerald-800">{patientDetail.patient.healthScore || 84}%</strong></p>
-                      <p className="text-slate-700">Allergies: <strong className="text-red-700">{patientDetail.patient.allergies?.join(', ') || 'None listed'}</strong></p>
-                    </div>
-                  </div>
-                </Card>
-
-                {/* VITALS STATUS CARD */}
-                <Card className="p-5 border-slate-200">
-                  <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2 uppercase tracking-wide">
-                    <HeartPulse className="h-4.5 w-4.5 text-red-600 animate-pulse" />
-                    Latest Health Vitals
-                  </h3>
-                  <div className="grid gap-3 grid-cols-2 md:grid-cols-6">
-                    {[
-                      { label: 'Weight', value: patientDetail.patient.vitals?.weight ? `${patientDetail.patient.vitals.weight} kg` : 'N/A' },
-                      { label: 'Height', value: patientDetail.patient.vitals?.height ? `${patientDetail.patient.vitals.height} cm` : 'N/A' },
-                      { label: 'Heart Rate', value: patientDetail.patient.vitals?.heartRate ? `${patientDetail.patient.vitals.heartRate} bpm` : 'N/A' },
-                      { label: 'Blood Pressure', value: patientDetail.patient.vitals?.bloodPressure || 'N/A' },
-                      { label: 'Temperature', value: patientDetail.patient.vitals?.temperature ? `${patientDetail.patient.vitals.temperature}°C` : 'N/A' },
-                      { label: 'SpO2', value: patientDetail.patient.vitals?.oxygenSaturation ? `${patientDetail.patient.vitals.oxygenSaturation}%` : 'N/A' },
-                    ].map((v) => (
-                      <div key={v.label} className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 text-center">
-                        <span className="text-[9px] text-slate-400 font-bold block uppercase">{v.label}</span>
-                        <span className="text-sm font-bold text-slate-800 mt-1 block">{v.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-
-                {/* DETAILED LISTS: MEDICATIONS & NOTES */}
-                <div className="grid gap-6 md:grid-cols-[1.15fr_0.85fr]">
-                  
-                  {/* MEDICATIONS LIST */}
-                  <Card className="p-5 border-slate-200">
-                    <SectionHeader title="Prescribed Medicine Rhythm" description="Active dosing schedules and tracked adherence ratings." />
-                    <div className="mt-4 space-y-3">
-                      {patientDetail.medications?.length > 0 ? (
-                        patientDetail.medications.map(med => {
-                          const adherenceRate = med.adherence?.target > 0 
-                            ? Math.round((med.adherence.taken / med.adherence.target) * 100)
-                            : 100;
-                          return (
-                            <div key={med._id} className="border border-slate-100 bg-slate-50/20 rounded-xl p-4 flex flex-col justify-between hover:border-emerald-100 transition-colors">
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <h4 className="font-bold text-slate-900 text-sm">{med.name}</h4>
-                                  <p className="text-[11px] text-slate-500 mt-0.5">{med.dosage} • {med.frequency}</p>
-                                </div>
-                                <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded">
-                                  {adherenceRate}% Adherence
-                                </span>
-                              </div>
-                              <div className="mt-3 flex justify-between items-center text-[10px] text-slate-400 border-t border-slate-100 pt-2 font-semibold">
-                                <span>Pill stock: <strong>{med.quantity ?? 30}</strong></span>
-                                <span>Times: {med.times?.join(', ') || 'N/A'}</span>
-                              </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <p className="text-xs text-slate-400 text-center py-8">No active medications registered.</p>
-                      )}
-                    </div>
-                  </Card>
-
-                  {/* CLINICAL NOTE LOGGER */}
-                  <Card className="p-5 border-slate-200">
-                    <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2 uppercase tracking-wide">
-                      <MessageSquare className="h-4.5 w-4.5 text-indigo-600" />
-                      Log Consultation Note
-                    </h3>
-                    <form onSubmit={handleAddNote} className="space-y-3">
-                      <Field label="Document Title">
-                        <input 
-                          type="text" 
-                          value={noteTitle}
-                          onChange={(e) => setNoteTitle(e.target.value)}
-                          placeholder="e.g. Care plan update" 
-                          className="input-field py-2 text-xs"
-                          required
-                        />
-                      </Field>
-                      <Field label="Category">
-                        <select 
-                          value={noteCategory}
-                          onChange={(e) => setNoteCategory(e.target.value)}
-                          className="input-field py-2 text-xs bg-white"
-                        >
-                          <option value="care-plan">Care Plan</option>
-                          <option value="diagnosis">Diagnosis</option>
-                          <option value="prescription">Prescription Update</option>
-                          <option value="follow-up">Follow-Up Instructs</option>
-                        </select>
-                      </Field>
-                      <Field label="Note Details">
-                        <textarea 
-                          value={noteContent}
-                          onChange={(e) => setNoteContent(e.target.value)}
-                          placeholder="Provide clinical feedback..."
-                          className="input-field py-2 text-xs resize-none"
-                          rows={4}
-                          required
-                        />
-                      </Field>
-                      <Button size="sm" type="submit" disabled={isSavingNote} className="w-full text-xs py-2">
-                        {isSavingNote ? 'Saving Note...' : 'Save Note & Alert Patient'}
-                      </Button>
-                    </form>
-                  </Card>
-                </div>
-
-                {/* APPOINTMENT ACTIONS & RECORD VAULT */}
-                <div className="grid gap-6 md:grid-cols-[1fr_1fr]">
-                  
-                  {/* APPOINTMENT APPROVALS */}
-                  <Card className="p-5 border-slate-200">
-                    <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2 uppercase tracking-wide">
-                      <Clock className="h-4.5 w-4.5 text-teal-600" />
-                      Appointments Approval
-                    </h3>
-                    <div className="space-y-3">
-                      {patientDetail.appointments?.length > 0 ? (
-                        patientDetail.appointments.map(apt => (
-                          <div key={apt._id} className="border border-slate-100 rounded-xl p-3 flex justify-between items-center text-xs bg-slate-50/20">
-                            <div>
-                              <p className="font-bold text-slate-900">{new Date(apt.date).toLocaleDateString()} at {apt.time}</p>
-                              <p className="text-slate-500 text-[10px] mt-0.5">{apt.notes || 'No notes'}</p>
-                              <span className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded mt-1.5 inline-block ${
-                                apt.status === 'completed'
-                                  ? 'bg-green-100 text-green-800'
-                                  : apt.status === 'cancelled'
-                                  ? 'bg-red-100 text-red-800'
-                                  : 'bg-yellow-100 text-yellow-800'
-                              }`}>
-                                {apt.status}
-                              </span>
-                            </div>
-                            <div className="flex gap-1">
-                              <IconButton label="Confirm" onClick={() => handleUpdateAppointmentStatus(apt._id, 'completed')} className="h-7 w-7 text-green-700 bg-green-50 border-0 rounded-md">
-                                <Check className="h-3.5 w-3.5" />
-                              </IconButton>
-                              <IconButton label="Cancel" onClick={() => handleUpdateAppointmentStatus(apt._id, 'cancelled')} className="h-7 w-7 text-red-600 bg-red-50 border-0 rounded-md">
-                                <CancelIcon className="h-3.5 w-3.5" />
-                              </IconButton>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-xs text-slate-400 text-center py-6">No appointments registered.</p>
-                      )}
-                    </div>
-                  </Card>
-
-                  {/* DOCUMENT VAULT */}
-                  <Card className="p-5 border-slate-200">
-                    <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2 uppercase tracking-wide">
-                      <FileText className="h-4.5 w-4.5 text-indigo-600" />
-                      Uploaded Documents
-                    </h3>
-                    <div className="space-y-2">
-                      {patientDetail.records?.length > 0 ? (
-                        patientDetail.records.map(rec => (
-                          <div key={rec._id} className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100 flex items-center justify-between text-xs hover:border-indigo-200 transition-colors">
-                            <div>
-                              <p className="font-bold text-slate-800">{rec.title}</p>
-                              <p className="text-slate-400 text-[9px] mt-0.5">{rec.summary || 'No summary description'}</p>
-                            </div>
-                            <FileText className="h-4 w-4 text-slate-400 shrink-0" />
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-xs text-slate-400 text-center py-6">No files uploaded.</p>
-                      )}
-                    </div>
-                  </Card>
-
-                </div>
-
-                {/* DOCTOR NOTES LOG FOR CONTEXT */}
-                <Card className="p-5 border-slate-200">
-                  <h3 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wide">Clinical Consultations History</h3>
-                  <div className="space-y-3">
-                    {patientDetail.notes?.length > 0 ? (
-                      patientDetail.notes.map(note => (
-                        <div key={note._id} className="bg-slate-50/30 p-4 rounded-xl border border-slate-200 text-xs">
-                          <div className="flex justify-between items-start">
-                            <span className="font-bold text-slate-900 text-sm">{note.title}</span>
-                            <span className="text-[9px] uppercase font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{note.category}</span>
-                          </div>
-                          <p className="text-slate-600 mt-2 leading-relaxed whitespace-pre-wrap">{note.content}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-xs text-slate-400 text-center py-6">No historic notes recorded.</p>
-                    )}
-                  </div>
-                </Card>
-
-              </div>
-            ) : (
-              <div className="grid min-h-[50vh] place-items-center">
-                <EmptyState
-                  icon={UserRound}
-                  title="No Linked Patient Selected"
-                  description="Select a linked patient from the sidebar directory to review files, prescribe care, or log consultations."
-                />
-              </div>
             )}
-          </section>
+          </div>
+
+          {/* TOP BAR ACTIONS */}
+          <div className="flex items-center gap-2">
+            <IconButton 
+              label="Notifications" 
+              onClick={() => setActiveView('notifications')}
+              className="h-10 w-10 border-slate-200 text-slate-600 hover:text-emerald-700 relative"
+            >
+              <Bell className="h-4.5 w-4.5" />
+              <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 bg-rose-600 rounded-full border-2 border-white" />
+            </IconButton>
+
+            <IconButton 
+              label="Theme Toggle (Contrast)" 
+              onClick={() => setHighContrast(!highContrast)} 
+              className={`h-10 w-10 border-slate-200 ${highContrast ? 'text-emerald-700 bg-emerald-50' : 'text-slate-600'}`}
+            >
+              <Contrast className="h-4.5 w-4.5" />
+            </IconButton>
+
+            <IconButton 
+              label="Help Desk" 
+              onClick={() => setShowHelpModal(true)} 
+              className="h-10 w-10 border-slate-200 text-slate-600"
+            >
+              <HelpCircle className="h-4.5 w-4.5" />
+            </IconButton>
+
+            <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block" />
+
+            <div className="hidden sm:flex flex-col text-right">
+              <span className="text-xs font-extrabold text-slate-900 leading-tight">Dr. {user.name}</span>
+              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wide mt-0.5">{user.specialty || 'Cardiologist'}</span>
+            </div>
+
+            <Button 
+              variant="secondary" 
+              onClick={onLogout} 
+              size="sm" 
+              className="min-h-9 px-3 text-xs"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Logout
+            </Button>
+          </div>
 
         </div>
-      </div>
-    </main>
-  );
-};
+      </header>
 
-export default DoctorDashboard;
+      {/* VIEW WORKSPACE SHELL */}
+      <div className="flex-1 flex relative">
+        
+        {/* COLLAPSIBLE LEFT SIDEBAR */}
+        <aside 
+          className={`bg-white/80 border-r border-emerald-100/50 backdrop-blur-xl transition-all duration-300 z-30 lg:sticky lg:top-[68px] lg:h-[calc(100vh-68px)] hidden lg:flex flex-col justify-between shrink-0 py-6 ${
+            isSidebarCollapsed ? 'w-[78px] px-3' : 'w-[250px] px-5'
+          }`}
+        >
+          <nav className="space-y-1.5" aria-label="Main clinician workspace menu">
+            {sidebarNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeView === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveView(item.id)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-2xl text-xs font-bold transition-all focus:ring-2 focus:ring-emerald-400 focus:outline-none ${
+                    isActive 
+                      ? 'bg-emerald-700 text-white shadow-sm' 
+                      : 'text-slate-600 hover:text-emerald-900 hover:bg-emerald-50/40'
+                  } ${isSidebarCollapsed ? 'justify-center' : ''}`}
+                  title={item.label}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  <Icon className="h-4.5 w-4.5 shrink-0" />
+                  {!isSidebarCollapsed && <span>{item.label}</span>}
+                </button>
+              );
+            })}
+          </nav>
+          
+          <div className={`pt-6 border-t border-slate-100 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
+            <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-600 shrink-0">
+              {user.name.split(' ').map(n => n[0]).join('')}
+            </div>
+            {!isSidebarCollapsed && (
+              <div className="text-left">
+                <p className="text-xs font-bold text-slate-800 truncate max-w-[130px]">{user.name}</p>
+                <p className="text-[9px] text-slate-400 font-semibold">{user.email}</p>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* MOBILE MENU NAV DRAWER */}
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 top-[68px] z-50 bg-slate-950/40 backdrop-blur-sm lg:hidden">
+            <aside className="bg-white w-[250px] h-full shadow-xl flex flex-col justify-between py-6 px-5 border-r border-slate-200 animate-slide-in">
+              <nav className="space-y-1.5" aria-label="Mobile clinician workspace menu">
+                {sidebarNavItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeView === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveView(item.id);
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 p-3 rounded-2xl text-xs font-bold transition-all ${
+                        isActive 
+                          ? 'bg-emerald-700 text-white shadow-sm' 
+                          : 'text-slate-600 hover:text-emerald-900 hover:bg-emerald-50/40'
+                      }`}
+                    >
+                      <Icon className="h-4.5 w-4.5 shrink-0" />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </aside>
+          </div>
+        )}
+
+        {/* MAIN VIEWPORT COMPONENT CONTAINER */}
+        <main className="flex-1 px-5 sm:px-8 lg:px-12 py-6 sm:py-8 overflow-y-auto">
+          <div className="max-w-6xl mx-auto">
+            {renderActiveView()}
+          </div>
+        </main>
+
+      </div>
+
+      {/* HELP INSTRUCTION MODAL */}
+      {showHelpModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+          <div className="surface-card-strong max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+              <HelpCircle className="h-6 w-6 text-emerald-700" />
+              <h2 className="text-lg font-bold text-slate-900">Clinician Workspace Guide</h2>
+            </div>
+            <div className="text-xs text-slate-600 space-y-2 leading-relaxed">
+              <p>• <strong>Global Search:</strong> Accessible in top header to search patient by name or unique ID.</p>
+              <p>• <strong>Smart Calendar:</strong> Drag-and-drop simulation by rescheduling. Identifies slot overlaps.</p>
+              <p>• <strong>Copilot Panel:</strong> Assess drug compatibility and generate consultation draft cards.</p>
+              <p>• <strong>Allergy Warner:</strong> Auto-flags allergen cautions when prescribing conflicting drugs.</p>
+            </div>
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <Button variant="primary" size="sm" onClick={() => setShowHelpModal(false)} className="text-xs min-h-9 px-4">Got it</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

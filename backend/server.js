@@ -38,7 +38,9 @@ connectDB();
 // Endpoints definitions
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/patients', require('./routes/patients'));
+app.use('/api/doctor', require('./routes/doctors'));
 app.use('/api/doctors', require('./routes/doctors'));
+app.use('/api/documents', require('./routes/documents'));
 app.use('/api/health', require('./routes/health'));
 
 app.get('/api/health-check', (_req, res) => {
@@ -53,6 +55,9 @@ app.use((req, res) => {
 
 // Centralized error handler
 app.use(errorHandler);
+
+// Initialize background queues
+require('./services/documentProcessingQueue');
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(` Server running on port ${PORT}`));
