@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Node.js-v18+-green?style=for-the-badge&logo=node.js" />
   <img src="https://img.shields.io/badge/MongoDB-8.x-green?style=for-the-badge&logo=mongodb" />
   <img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react" />
-  <img src="https://img.shields.io/badge/status-production--ready-brightgreen?style=for-the-badge" />
+ 
 </p>
 
 ---
