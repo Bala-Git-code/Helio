@@ -224,38 +224,6 @@ cp -r dist ../backend/dist
 # Start server
 cd backend && node server.js
 ```
-
-### Process Topologies (for scaling)
-```bash
-# API Gateway (multiple instances, behind load balancer)
-PROCESS_TYPE=api node server.js
-
-# Worker fleet (scale based on queue depth)
-PROCESS_TYPE=worker node worker.js
-
-# Single outbox publisher (or one per region)
-PROCESS_TYPE=outbox-publisher node worker.js
-
-# Single scheduler (or leader-elected)
-PROCESS_TYPE=scheduler node worker.js
-```
-
----
-
-## 🗺️ Roadmap
-
-- [ ] Docker + Docker Compose packaging
-- [ ] GitHub Actions CI/CD pipeline
-- [ ] Redis-backed queue acceleration
-- [ ] HTTP-only cookie JWT migration
-- [ ] Multi-language WhatsApp templates
-- [ ] Push notifications (FCM/APNS)
-- [ ] EHR/FHIR integration layer
-- [ ] Wearable device data ingestion
-- [ ] SOC 2 Type II compliance
-
----
-
 ## 🤝 Contributing
 
 1. Fork the repository
