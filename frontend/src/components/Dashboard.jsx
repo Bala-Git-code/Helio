@@ -45,6 +45,12 @@ import AppointmentSummaryModal from './AppointmentSummaryModal';
 import ErrorBoundary from './ErrorBoundary';
 import { apiRequest } from '../utils/api';
 import { BrandMark, Button, Card, EmptyState, IconButton, SectionHeader, StatCard, Field } from './design-system';
+import { 
+  MedicationHome, TodayCarePlan, MedicineDetailView, AddMedicineWizard, 
+  PrescriptionMedicineReview, MedicationCalendar, DoseHistoryView, 
+  AdherenceOverview, RefillCenter, ReminderPreferences, 
+  WhatsAppReadiness, VoiceMedicationInput 
+} from './MedicationCareComponents';
 
 // Visual Skeleton card components to avoid CLS layout janks
 const SkeletonLoader = () => (
@@ -69,6 +75,8 @@ const Dashboard = ({
   onGoHome,
   showSuccessNotification,
   onNotificationDismiss,
+  currentPath,
+  onNavigate,
 }) => {
   const [careData, setCareData] = useState({ profile: {}, medications: [], appointments: [], records: [], notes: [], notifications: [] });
   const [isLoadingCareData, setIsLoadingCareData] = useState(true);
@@ -78,6 +86,26 @@ const Dashboard = ({
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Medication sub-tab states
+  const [medSubTab, setMedSubTab] = useState('home');
+  const [selectedMedId, setSelectedMedId] = useState(null);
+
+  // Medication care states
+  const [todayDoses, setTodayDoses] = useState([]);
+  const [refillForecast, setRefillForecast] = useState([]);
+  const [adherenceMetrics, setAdherenceMetrics] = useState(null);
+  const [historyLogs, setHistoryLogs] = useState([]);
+  const [isLoadingMedData, setIsLoadingMedData] = useState(false);
+
+  // Smart Speech & Vision review states
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
+  const [ocrExtractedData, setOcrExtractedData] = useState(null);
+
+  const navigateTo = (path) => {
+    window.history.pushState(null, '', path);
+    if (onNavigate) onNavigate(path);
+  };
 
   // Modals & Panels
   const [showMedicineModal, setShowMedicineModal] = useState(false);
@@ -144,12 +172,84 @@ const Dashboard = ({
     }
   };
 
+  const loadMedicationData = async () => {
+    try {
+      setIsLoadingMedData(true);
+      const todayRes = await apiRequest('/health/medications/today');
+      setTodayDoses(todayRes.doseInstances || []);
+
+      const refillRes = await apiRequest('/health/medications/refills');
+      setRefillForecast(refillRes.refillData || []);
+
+      const adherenceRes = await apiRequest('/health/medications/adherence');
+      setAdherenceMetrics(adherenceRes || null);
+
+      const historyRes = await apiRequest('/health/medications/history');
+      setHistoryLogs(historyRes.logs || []);
+    } catch (err) {
+      console.warn('Failed to load medication care metrics:', err);
+    } finally {
+      setIsLoadingMedData(false);
+    }
+  };
+
   useEffect(() => {
     if (user?.email) {
       loadCareData();
       loadConsentRequests();
+      loadMedicationData();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!currentPath) return;
+    
+    if (currentPath.startsWith('/patient/medications')) {
+      setActiveTab('medications');
+      const sub = currentPath.substring('/patient/medications'.length);
+      if (sub === '' || sub === '/') {
+        setMedSubTab('home');
+        setSelectedMedId(null);
+      } else if (sub === '/today') {
+        setMedSubTab('today');
+        setSelectedMedId(null);
+      } else if (sub === '/history') {
+        setMedSubTab('history');
+        setSelectedMedId(null);
+      } else if (sub === '/adherence') {
+        setMedSubTab('adherence');
+        setSelectedMedId(null);
+      } else if (sub === '/refills') {
+        setMedSubTab('refills');
+        setSelectedMedId(null);
+      } else if (sub === '/preferences') {
+        setMedSubTab('preferences');
+        setSelectedMedId(null);
+      } else {
+        const match = sub.match(/^\/([a-fA-F0-9]+)$/);
+        if (match) {
+          setMedSubTab('detail');
+          setSelectedMedId(match[1]);
+        }
+      }
+    } else if (currentPath === '/patient/appointments') {
+      setActiveTab('appointments');
+    } else if (currentPath === '/patient/records') {
+      setActiveTab('records');
+    } else if (currentPath === '/patient/vitals') {
+      setActiveTab('vitals');
+    } else if (currentPath === '/patient/timeline') {
+      setActiveTab('timeline');
+    } else if (currentPath === '/patient/ai') {
+      setActiveTab('ai');
+    } else if (currentPath === '/patient/family') {
+      setActiveTab('family');
+    } else if (currentPath === '/patient/notifications') {
+      setActiveTab('notifications');
+    } else if (currentPath === '/patient/dashboard') {
+      setActiveTab('dashboard');
+    }
+  }, [currentPath]);
 
   useEffect(() => {
     setShowNotification(showSuccessNotification);
@@ -209,66 +309,121 @@ const Dashboard = ({
     }
   };
 
-  // Medicine Operations
-  const handleAddMedicine = async (medInfo) => {
+  // Medicine Care Operations
+  const handleAddMedicationLocal = async (medInfo) => {
     try {
       await apiRequest('/health/medications', {
         method: 'POST',
-        body: JSON.stringify(medInfo),
+        body: JSON.stringify(medInfo)
       });
+      loadMedicationData();
       loadCareData();
     } catch (err) {
       alert(err.message || 'Failed to add medication.');
     }
   };
 
-  const handleDeleteMedicine = async (medId) => {
-    if (!window.confirm('Are you sure you want to remove this medication schedule?')) return;
-    try {
-      await apiRequest(`/health/medications/${medId}`, {
-        method: 'DELETE',
-      });
-      loadCareData();
-    } catch (err) {
-      alert(err.message || 'Failed to delete medication.');
-    }
-  };
+  const handleTakeDoseLocal = async (medId, timeSlot, note = '') => {
+    const prevDoses = [...todayDoses];
+    setTodayDoses(prevDoses.map(d => 
+      (d.medicationId === medId && d.timeSlot === timeSlot)
+        ? { ...d, status: 'Taken On Time', takenAt: new Date() }
+        : d
+    ));
 
-  const handleToggleMedStatus = async (medId, currentStatus) => {
-    try {
-      await apiRequest(`/health/medications/${medId}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ active: !currentStatus }),
-      });
-      loadCareData();
-    } catch (err) {
-      alert(err.message || 'Failed to toggle medication schedule status.');
-    }
-  };
-
-  const handleTakeDose = async (medId, timeSlot) => {
     try {
       await apiRequest(`/health/medications/${medId}/take`, {
         method: 'POST',
-        body: JSON.stringify({ timeSlot })
+        body: JSON.stringify({ timeSlot, note })
       });
+      loadMedicationData();
       loadCareData();
     } catch (err) {
+      setTodayDoses(prevDoses);
       alert(err.message || 'Failed to record dose intake.');
     }
   };
 
-  const handleRefillMed = async (medId) => {
-    const amount = window.prompt('Enter number of pills to add:', '30');
-    if (amount === null) return;
+  const handleSkipDoseLocal = async (medId, timeSlot, reason, note = '') => {
+    const prevDoses = [...todayDoses];
+    setTodayDoses(prevDoses.map(d => 
+      (d.medicationId === medId && d.timeSlot === timeSlot)
+        ? { ...d, status: 'Skipped', reason, note }
+        : d
+    ));
+
     try {
-      await apiRequest(`/health/medications/${medId}/refill`, {
+      await apiRequest(`/health/medications/${medId}/skip`, {
         method: 'POST',
-        body: JSON.stringify({ refillAmount: parseInt(amount, 10) || 30 })
+        body: JSON.stringify({ timeSlot, reason, note })
       });
+      loadMedicationData();
       loadCareData();
     } catch (err) {
-      alert(err.message || 'Refill failed.');
+      setTodayDoses(prevDoses);
+      alert(err.message || 'Failed to record skipped dose.');
+    }
+  };
+
+  const handleSnoozeDoseLocal = async (medId, durationMinutes) => {
+    try {
+      await apiRequest(`/health/medications/${medId}/snooze`, {
+        method: 'POST',
+        body: JSON.stringify({ durationMinutes })
+      });
+      loadMedicationData();
+    } catch (err) {
+      alert(err.message || 'Failed to snooze dose.');
+    }
+  };
+
+  const handleToggleMedStatusLocal = async (medId, currentActive) => {
+    try {
+      await apiRequest(`/health/medications/${medId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: !currentActive })
+      });
+      loadMedicationData();
+      loadCareData();
+    } catch (err) {
+      alert(err.message || 'Failed to update schedule status.');
+    }
+  };
+
+  const handleDeleteMedicationLocal = async (medId) => {
+    try {
+      await apiRequest(`/health/medications/${medId}`, {
+        method: 'DELETE'
+      });
+      loadMedicationData();
+      loadCareData();
+      navigateTo('/patient/medications');
+    } catch (err) {
+      alert(err.message || 'Failed to remove medication plan.');
+    }
+  };
+
+  const handleSavePreferencesLocal = async (medId, prefData) => {
+    try {
+      await apiRequest(`/health/medications/${medId}/preferences`, {
+        method: 'PATCH',
+        body: JSON.stringify(prefData)
+      });
+      loadMedicationData();
+    } catch (err) {
+      alert(err.message || 'Failed to save reminder preferences.');
+    }
+  };
+
+  const handleAdjustRefillLocal = async (medId, adjustData) => {
+    try {
+      await apiRequest(`/health/medications/${medId}/refill-adjust`, {
+        method: 'POST',
+        body: JSON.stringify(adjustData)
+      });
+      loadMedicationData();
+    } catch (err) {
+      alert(err.message || 'Failed to adjust supply levels.');
     }
   };
 
@@ -527,7 +682,7 @@ const Dashboard = ({
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => navigateTo('/patient/' + item.id)}
                   className={cn(
                     "w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition-all duration-300",
                     isActive 
@@ -604,7 +759,7 @@ const Dashboard = ({
                     <button
                       key={item.id}
                       onClick={() => {
-                        setActiveTab(item.id);
+                        navigateTo('/patient/' + item.id);
                         setIsMobileMenuOpen(false);
                       }}
                       className={cn(
@@ -859,7 +1014,12 @@ const Dashboard = ({
                       <Card className="p-6 border-slate-200">
                         <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
                           <h4 className="font-extrabold text-slate-800 text-sm">Dosing Plan Summary</h4>
-                          <span className="text-[10px] text-slate-400 font-bold uppercase">{todaysMedicines.length} Active</span>
+                          <div className="flex gap-2 items-center">
+                            <button onClick={() => setShowVoiceModal(true)} className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">
+                              Voice Log
+                            </button>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase">{todaysMedicines.length} Active</span>
+                          </div>
                         </div>
                         {todaysMedicines.length > 0 ? (
                           <div className="space-y-3">
@@ -932,103 +1092,101 @@ const Dashboard = ({
                 </div>
               )}
 
-              {/* ========================================================= */}
-              {/* TAB 2: MEDICATIONS VAULT */}
-              {/* ========================================================= */}
               {activeTab === 'medications' && (
-                <ErrorBoundary>
-                  <Card className="overflow-hidden border-slate-200 animate-fade-in">
-                    <div className="flex flex-col gap-4 border-b border-emerald-100 bg-emerald-50/50 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-                      <SectionHeader title="Medication Dosing Vault" description="Pause/resume, add refill stock counts, and log dose schedules directly." />
-                      <Button onClick={() => setShowMedicineModal(true)} size="sm"><Plus className="h-4.5 w-4.5" /> Add Medication</Button>
-                    </div>
-                    <div className="p-6">
-                      {todaysMedicines.length ? (
-                        <div className="grid gap-4 md:grid-cols-2">
-                          {todaysMedicines.map((medicine) => {
-                            const isLowStock = (medicine.quantity !== undefined && medicine.quantity <= (medicine.refillThreshold || 5));
-                            const isPaused = medicine.active === false;
-                            return (
-                              <article 
-                                key={medicine._id} 
-                                className={cn(
-                                  "rounded-2xl border bg-slate-50/20 p-5 flex flex-col justify-between hover:border-emerald-100 transition-all duration-300 shadow-sm",
-                                  isPaused ? "opacity-60 bg-slate-100 border-slate-200" : "border-slate-150"
-                                )}
-                              >
-                                <div>
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className={cn("grid h-10 w-10 place-items-center rounded-xl text-white shadow-sm", isPaused ? "bg-slate-400" : "bg-emerald-600")}>
-                                      <Pill className="h-5 w-5" />
-                                    </div>
-                                    <div className="flex gap-1">
-                                      <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        className="h-8 text-[10px] px-2.5 font-bold"
-                                        onClick={() => handleToggleMedStatus(medicine._id, medicine.active)}
-                                      >
-                                        {isPaused ? 'Resume' : 'Pause'}
-                                      </Button>
-                                      <IconButton label={`Remove ${medicine.name}`} onClick={() => handleDeleteMedicine(medicine._id)} className="h-8 w-8 rounded-lg border-0 hover:bg-red-50">
-                                        <Trash2 className="h-4 w-4 text-red-600" />
-                                      </IconButton>
-                                    </div>
-                                  </div>
-                                  <h3 className="mt-4 font-bold text-slate-900 text-base leading-tight">
-                                    {medicine.name}
-                                    {isPaused && <span className="ml-2 text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded uppercase">Paused</span>}
-                                  </h3>
-                                  <p className="mt-1 text-xs text-slate-500">{medicine.dosage} • {medicine.frequency}</p>
-                                  
-                                  {/* Stock Indicator */}
-                                  <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px]">
-                                    <span className={isLowStock ? 'text-rose-600 font-bold' : 'text-slate-500'}>
-                                      {medicine.quantity !== undefined ? `${medicine.quantity} pills in stock` : 'No stock tracked'}
-                                    </span>
-                                    <Button size="sm" variant="ghost" className="h-7 text-[10px] text-emerald-800 font-semibold px-2 hover:bg-emerald-50" onClick={() => handleRefillMed(medicine._id)}>
-                                      Refill Pills
-                                    </Button>
-                                  </div>
-                                </div>
+                <div className="space-y-6">
+                  {/* Sub tab navigation */}
+                  <div className="flex border-b border-slate-200 text-xs font-bold text-slate-500 overflow-x-auto gap-4 pb-1">
+                    {[
+                      { id: 'home', label: 'Medications Home' },
+                      { id: 'today', label: 'Today\'s Care Plan' },
+                      { id: 'history', label: 'Dose History' },
+                      { id: 'adherence', label: 'Adherence Insights' },
+                      { id: 'refills', label: 'Refill Center' },
+                      { id: 'preferences', label: 'Preferences' }
+                    ].map(sub => (
+                      <button
+                        key={sub.id}
+                        onClick={() => navigateTo(`/patient/medications/${sub.id === 'home' ? '' : sub.id}`)}
+                        className={cn(
+                          "py-2 px-3 border-b-2 transition-all whitespace-nowrap",
+                          medSubTab === sub.id ? "border-emerald-600 text-emerald-805" : "border-transparent hover:text-slate-800"
+                        )}
+                      >
+                        {sub.label}
+                      </button>
+                    ))}
+                    <Button onClick={() => setShowMedicineModal(true)} size="sm" className="ml-auto h-8 text-xs py-1.5 px-3">
+                      <Plus className="h-3.5 w-3.5" /> Add Medicine
+                    </Button>
+                  </div>
 
-                                <div className="mt-4 pt-3 border-t border-slate-150">
-                                  <p className="text-[10px] text-slate-400 mb-2 uppercase font-bold tracking-wider">Log taken slots:</p>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {(medicine.times || []).map((time) => (
-                                      <button
-                                        key={time}
-                                        onClick={() => !isPaused && handleTakeDose(medicine._id, time)}
-                                        disabled={isPaused}
-                                        className={cn(
-                                          "chip text-[11px] py-1.5 px-3.5 border font-bold transition-all flex items-center gap-1.5",
-                                          isPaused 
-                                            ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed" 
-                                            : "bg-emerald-50 text-emerald-800 border-emerald-100 hover:bg-emerald-100 hover:scale-105"
-                                        )}
-                                        title={isPaused ? "Schedule paused" : "Log taken"}
-                                      >
-                                        <CheckCircle2 className={cn("h-3.5 w-3.5", isPaused ? "text-slate-300" : "text-emerald-600")} />
-                                        <span>{time}</span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              </article>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <EmptyState
-                          icon={Pill}
-                          title="No active medicines"
-                          description="Log your daily prescriptions to construct your care schedule."
-                          action={<Button onClick={() => setShowMedicineModal(true)}>Log First Medicine</Button>}
-                        />
-                      )}
-                    </div>
-                  </Card>
-                </ErrorBoundary>
+                  <ErrorBoundary>
+                    {medSubTab === 'home' && (
+                      <MedicationHome
+                        doseInstances={todayDoses}
+                        refillData={refillForecast}
+                        adherence={adherenceMetrics}
+                        doctorGuidance={careData.notes?.[0]}
+                        onSelectSubTab={(sub) => navigateTo(`/patient/medications/${sub}`)}
+                        onSelectMedicine={(id) => navigateTo(`/patient/medications/${id}`)}
+                      />
+                    )}
+
+                    {medSubTab === 'today' && (
+                      <TodayCarePlan
+                        doseInstances={todayDoses}
+                        onTake={handleTakeDoseLocal}
+                        onSkip={handleSkipDoseLocal}
+                        onSnooze={handleSnoozeDoseLocal}
+                        onShowInstructions={(id) => navigateTo(`/patient/medications/${id}`)}
+                      />
+                    )}
+
+                    {medSubTab === 'history' && (
+                      <DoseHistoryView
+                        logs={historyLogs}
+                      />
+                    )}
+
+                    {medSubTab === 'adherence' && (
+                      <AdherenceOverview
+                        adherence={adherenceMetrics}
+                      />
+                    )}
+
+                    {medSubTab === 'refills' && (
+                      <RefillCenter
+                        refillData={refillForecast}
+                        onAdjustSupply={handleAdjustRefillLocal}
+                      />
+                    )}
+
+                    {medSubTab === 'preferences' && (
+                      <ReminderPreferences
+                        config={careData.profile}
+                        onSave={async (data) => {
+                          await apiRequest('/health/profile', {
+                            method: 'POST',
+                            body: JSON.stringify(data)
+                          });
+                          loadCareData();
+                          loadMedicationData();
+                        }}
+                      />
+                    )}
+
+                    {medSubTab === 'detail' && selectedMedId && (
+                      <MedicineDetailView
+                        medicineId={selectedMedId}
+                        onClose={() => navigateTo('/patient/medications')}
+                        onToggleStatus={handleToggleMedStatusLocal}
+                        onRemove={handleDeleteMedicationLocal}
+                        onSavePreferences={handleSavePreferencesLocal}
+                        onAdjustRefill={handleAdjustRefillLocal}
+                      />
+                    )}
+                  </ErrorBoundary>
+                </div>
               )}
 
               {/* ========================================================= */}
@@ -1472,7 +1630,32 @@ const Dashboard = ({
       )}
 
       {/* Modals & popup wrappers */}
-      {showMedicineModal && <MedicineReminder onClose={() => setShowMedicineModal(false)} onAddMedicine={handleAddMedicine} />}
+      {showMedicineModal && (
+        <AddMedicineWizard 
+          onClose={() => setShowMedicineModal(false)} 
+          onAdd={handleAddMedicationLocal} 
+          allergiesList={careData.profile?.allergies || ['penicillin']} 
+        />
+      )}
+      {ocrExtractedData && (
+        <PrescriptionMedicineReview
+          extractedMedicines={ocrExtractedData}
+          onMergeLink={async (list) => {
+            for (const med of list) {
+              await handleAddMedicationLocal(med);
+            }
+            setOcrExtractedData(null);
+            alert('Schedules linked and activated successfully!');
+          }}
+          onCancel={() => setOcrExtractedData(null)}
+        />
+      )}
+      {showVoiceModal && (
+        <VoiceMedicationInput 
+          onAddMedicine={handleAddMedicationLocal} 
+          onClose={() => setShowVoiceModal(false)} 
+        />
+      )}
       {showAppointmentModal && <AppointmentBooking onClose={() => setShowAppointmentModal(false)} onAddAppointment={handleAddAppointment} />}
       {showProfileModal && <ProfileModal user={{ ...user, ...careData.profile }} onClose={() => setShowProfileModal(false)} onUpdateProfile={async (updatedProfile) => {
         try {

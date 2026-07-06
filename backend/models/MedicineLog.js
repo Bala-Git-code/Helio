@@ -19,6 +19,17 @@ const MedicineLogSchema = new Schema(
       type: String,
       required: true
     },
+    scheduledTime: {
+      type: String
+    },
+    scheduledDate: {
+      type: Date
+    },
+    status: {
+      type: String,
+      enum: ['Upcoming', 'Due', 'Taken On Time', 'Taken Late', 'Snoozed', 'Skipped', 'Missed', 'Pending Confirmation', 'Schedule Changed', 'Cancelled by Clinician'],
+      default: 'Taken On Time'
+    },
     takenAt: {
       type: Date,
       default: Date.now
@@ -32,6 +43,9 @@ const MedicineLogSchema = new Schema(
       default: false
     },
     reason: {
+      type: String
+    },
+    note: {
       type: String
     },
     source: {

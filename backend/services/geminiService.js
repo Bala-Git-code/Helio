@@ -193,3 +193,7 @@ function simulateOCRResponse(base64Image) {
     }
   ];
 }
+
+exports.disableGenAI = () => {
+  genAI = null;
+};

@@ -20,9 +20,11 @@ router.get('/analytics', doctorController.getAnalytics);
 
 // 2. PATIENTS DIRECTORY
 router.get('/patients', doctorController.getPatients);
+router.get('/medications/attention', doctorController.getMedicationsAttention);
 
 // 3. PATIENT DETAIL PROFILE (Protected by consent)
 router.get('/patients/:id', validateObjectId('id'), verifyPatientConsent, doctorController.getPatientById);
+router.get('/patients/:id/medications', validateObjectId('id'), verifyPatientConsent, doctorController.getPatientMedications);
 
 // 4. CONSENT & LINKING
 router.post('/consent/request', validateLinkPayload, doctorController.requestConsent);

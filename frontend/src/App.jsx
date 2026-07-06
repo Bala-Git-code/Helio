@@ -18,6 +18,15 @@ function App() {
   // App Notifications & Tours
   const [showLoginNotification, setShowLoginNotification] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPath(window.location.pathname);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // 1. Session Restore on Application Mount
   useEffect(() => {
@@ -158,6 +167,8 @@ function App() {
         <DoctorDashboard 
           user={user}
           onLogout={handleLogout}
+          currentPath={currentPath}
+          onNavigate={setCurrentPath}
         />
       )}
       
@@ -183,6 +194,8 @@ function App() {
           onGoHome={handleGoHome}
           showSuccessNotification={showLoginNotification}
           onNotificationDismiss={handleNotificationDismiss}
+          currentPath={currentPath}
+          onNavigate={setCurrentPath}
         />
       )}
 
