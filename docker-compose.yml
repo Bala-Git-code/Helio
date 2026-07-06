@@ -1,0 +1,182 @@
+# ================================================================
+# HELIO Platform — Docker Compose (Production Simulation)
+# ================================================================
+# Runs ALL containers in production-equivalent configuration.
+# Use this for local production testing, staging, and CI/CD.
+#
+# Usage:
+#   docker compose up --build           # Build and start all services
+#   docker compose up -d                # Start in detached mode
+#   docker compose logs -f helio-api    # Stream API logs
+#   docker compose down -v              # Stop and remove volumes
+#
+# Environment:
+#   Create backend/.env from backend/.env.production.example
+# ================================================================
+
+networks:
+  helio-net:
+    driver: bridge
+
+volumes:
+  mongo-data:
+    driver: local
+  redis-data:
+    driver: local
+  uploads-data:
+    driver: local
+
+services:
+
+  # ── MongoDB (Local Development / Staging Only) ──────────────────
+  # In production, replace this with MongoDB Atlas URI in .env
+  mongo:
+    image: mongo:7.0
+    container_name: helio-mongo
+    restart: unless-stopped
+    networks:
+      - helio-net
+    volumes:
+      - mongo-data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: helio
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Redis (Optional — Session Cache / Pub-Sub) ──────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: helio-redis
+    restart: unless-stopped
+    networks:
+      - helio-net
+    volumes:
+      - redis-data:/data
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Frontend (React/Vite → nginx) ──────────────────────────────
+  helio-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    container_name: helio-frontend
+    restart: unless-stopped
+    networks:
+      - helio-net
+    ports:
+      - "3000:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── API Gateway ─────────────────────────────────────────────────
+  helio-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: helio-api
+    restart: unless-stopped
+    networks:
+      - helio-net
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./backend/.env
+    environment:
+      PROCESS_TYPE: api
+      NODE_ENV: production
+    volumes:
+      - uploads-data:/app/storage/uploads
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/api/health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ── Worker Fleet (Background Job Processors) ────────────────────
+  helio-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: helio-worker
+    restart: unless-stopped
+    networks:
+      - helio-net
+    env_file:
+      - ./backend/.env
+    environment:
+      PROCESS_TYPE: worker
+      NODE_ENV: production
+    volumes:
+      - uploads-data:/app/storage/uploads
+    command: ["node", "worker.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+      helio-api:
+        condition: service_healthy
+
+  # ── Scheduler (Tick Dispatcher) ─────────────────────────────────
+  helio-scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: helio-scheduler
+    restart: unless-stopped
+    networks:
+      - helio-net
+    env_file:
+      - ./backend/.env
+    environment:
+      PROCESS_TYPE: scheduler
+      NODE_ENV: production
+    command: ["node", "worker.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # ── Outbox Publisher (Event Router Daemon) ──────────────────────
+  helio-outbox:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: helio-outbox
+    restart: unless-stopped
+    networks:
+      - helio-net
+    env_file:
+      - ./backend/.env
+    environment:
+      PROCESS_TYPE: outbox-publisher
+      NODE_ENV: production
+    command: ["node", "worker.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
