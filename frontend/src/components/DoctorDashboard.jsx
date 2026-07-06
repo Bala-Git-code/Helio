@@ -17,6 +17,7 @@ import SmartCalendar from './doctor/SmartCalendar';
 import AIConsultantPanel from './doctor/AIConsultantPanel';
 import NotificationHub from './doctor/NotificationHub';
 import PrescriptionConsole from './doctor/PrescriptionConsole';
+import AttentionWorklist from './doctor/AttentionWorklist';
 
 export default function DoctorDashboard({ user, onLogout }) {
   const [patients, setPatients] = useState([]);
@@ -180,6 +181,13 @@ export default function DoctorDashboard({ user, onLogout }) {
             onStartConsultation={(id) => { setSelectedPatientId(id); setActiveView('consultations'); }}
             onOpenPrescription={() => setActiveView('prescriptions')}
             onOpenReportUpload={() => setActiveView('records')}
+          />
+        );
+      case 'attention':
+        return (
+          <AttentionWorklist 
+            onSelectPatient={(id) => { setSelectedPatientId(id); setActiveView('records'); }}
+            onAddNote={handleAddNote}
           />
         );
       case 'patients':
@@ -349,6 +357,7 @@ export default function DoctorDashboard({ user, onLogout }) {
   // Nav items listing helper
   const sidebarNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Layers },
+    { id: 'attention', label: 'Attention Worklist', icon: AlertTriangle },
     { id: 'patients', label: 'Patients Directory', icon: UserRound },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
     { id: 'records', label: 'Patient Profile', icon: FileText },

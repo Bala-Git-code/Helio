@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   User, ShieldAlert, HeartPulse, Pill, Clock, FileText, Download, ZoomIn, 
   ZoomOut, ShieldCheck, Mail, Phone, Calendar, Search, Play, HelpCircle, Activity
 } from 'lucide-react';
 import { Card, Button } from '../design-system';
+import { apiRequest } from '../../utils/api';
 
 export default function PatientProfileView({
   patientDetail,
@@ -29,8 +30,75 @@ export default function PatientProfileView({
   // Consent simulator
   const [consentGranted, setConsentGranted] = useState(true); // Can toggle to show lock screen if wanted
 
-  const toggleMedStatus = (id, newStatus) => {
-    setMeds(prev => prev.map(m => m.id === id ? { ...m, status: newStatus } : m));
+  const [medSummary, setMedSummary] = useState(null);
+  const [isLoadingMedSummary, setIsLoadingMedSummary] = useState(false);
+  const [guidanceText, setGuidanceText] = useState('');
+  const [isSavingGuidance, setIsSavingGuidance] = useState(false);
+
+  const fetchMedSummary = async () => {
+    if (!patient?.id) return;
+    try {
+      setIsLoadingMedSummary(true);
+      const res = await apiRequest(`/doctors/patients/${patient.id}/medications`);
+      setMedSummary(res);
+    } catch (err) {
+      console.error('Failed to load patient medications clinical summary:', err);
+    } finally {
+      setIsLoadingMedSummary(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'medications' && patient?.id) {
+      fetchMedSummary();
+    }
+  }, [activeTab, patient?.id]);
+
+  const handleDiscontinueMed = async (medId) => {
+    const confirm = window.confirm('Are you sure you want to permanently discontinue this medication?');
+    if (!confirm) return;
+    try {
+      await apiRequest(`/health/medications/${medId}`, {
+        method: 'DELETE'
+      });
+      fetchMedSummary();
+    } catch (err) {
+      alert(err.message || 'Failed to discontinue medication.');
+    }
+  };
+
+  const handleToggleActiveMed = async (medId, currentlyActive) => {
+    try {
+      await apiRequest(`/health/medications/${medId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: !currentlyActive })
+      });
+      fetchMedSummary();
+    } catch (err) {
+      alert(err.message || 'Failed to toggle status.');
+    }
+  };
+
+  const handleSubmitGuidance = async (e) => {
+    e.preventDefault();
+    if (!guidanceText.trim()) return;
+    try {
+      setIsSavingGuidance(true);
+      if (onAddNote) {
+        await onAddNote({
+          patientId: patient.id,
+          title: 'Medication Care Instruction',
+          content: guidanceText,
+          category: 'care-plan'
+        });
+        setGuidanceText('');
+        alert('Medication care instruction sent to patient portal.');
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to submit guidance.');
+    } finally {
+      setIsSavingGuidance(false);
+    }
   };
 
   const getAge = (dob) => {
@@ -259,72 +327,235 @@ export default function PatientProfileView({
 
         {/* 3. MEDICATIONS CONTROL */}
         {activeTab === 'medications' && (
-          <Card className="p-5">
-            <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2 uppercase tracking-wide border-b border-slate-100 pb-2">
-              <Pill className="h-4.5 w-4.5 text-emerald-600" />
-              Active Medication Control Console
-            </h3>
-
-            <div className="space-y-4">
-              {meds.map((m) => (
-                <div 
-                  key={m.id} 
-                  className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-colors ${
-                    m.status === 'stopped' 
-                      ? 'bg-slate-50 text-slate-400 border-slate-100 line-through' 
-                      : m.status === 'paused'
-                      ? 'bg-amber-50/20 text-slate-600 border-amber-100'
-                      : 'bg-white text-slate-800 border-slate-100 hover:border-emerald-200'
-                  }`}
-                >
-                  <div>
-                    <h4 className="font-extrabold text-sm text-slate-950 flex items-center gap-2">
-                      {m.name}
-                      <span className={`text-[8px] font-extrabold uppercase px-1.5 py-0.2 rounded border leading-none ${
-                        m.status === 'active' 
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-100' 
-                          : m.status === 'paused'
-                          ? 'bg-amber-50 text-amber-800 border-amber-100'
-                          : 'bg-slate-100 text-slate-500 border-slate-200'
-                      }`}>
-                        {m.status}
-                      </span>
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-1 font-medium">
-                      Dosage: <strong>{m.dosage}</strong> • Frequency: <strong>{m.frequency}</strong> • Began: <strong>{m.startDate}</strong>
+          <div className="space-y-6">
+            {isLoadingMedSummary ? (
+              <Card className="p-12 text-center border-slate-200">
+                <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-600" />
+                <p className="text-xs text-slate-500 font-bold">Querying clinical adherence metrics...</p>
+              </Card>
+            ) : (
+              <>
+                {/* 1. Clinical Adherence Indicators */}
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <Card className="p-5 border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">7-Day Adherence</span>
+                    <p className="text-2xl font-extrabold text-slate-800 mt-2">
+                      {medSummary?.adherenceSummary?.['7'] !== undefined ? `${medSummary.adherenceSummary['7']}%` : 'N/A'}
                     </p>
+                    <div className="mt-2 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-emerald-600" 
+                        style={{ width: `${medSummary?.adherenceSummary?.['7'] || 0}%` }} 
+                      />
+                    </div>
+                  </Card>
+                  <Card className="p-5 border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">30-Day Adherence</span>
+                    <p className="text-2xl font-extrabold text-slate-800 mt-2">
+                      {medSummary?.adherenceSummary?.['30'] !== undefined ? `${medSummary.adherenceSummary['30']}%` : 'N/A'}
+                    </p>
+                    <div className="mt-2 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-teal-600" 
+                        style={{ width: `${medSummary?.adherenceSummary?.['30'] || 0}%` }} 
+                      />
+                    </div>
+                  </Card>
+                  <Card className="p-5 border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Total Logged Doses</span>
+                    <p className="text-2xl font-extrabold text-slate-800 mt-2">
+                      {medSummary?.adherenceSummary?.totalTaken || 0} / {medSummary?.adherenceSummary?.totalScheduled || 0}
+                    </p>
+                    <span className="text-[10px] text-slate-400 block mt-1.5">
+                      Taken On Time or Late
+                    </span>
+                  </Card>
+                  <Card className="p-5 border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Skipped / Missed</span>
+                    <p className="text-2xl font-extrabold text-rose-600 mt-2">
+                      {medSummary?.adherenceSummary?.totalSkipped || 0} / {medSummary?.adherenceSummary?.totalMissed || 0}
+                    </p>
+                    <span className="text-[10px] text-slate-400 block mt-1.5">
+                      Intended omissions vs overrides
+                    </span>
+                  </Card>
+                </div>
+
+                {/* 2. Active Medications Console */}
+                <div className="grid gap-6 lg:grid-cols-3">
+                  <div className="lg:col-span-2 space-y-4">
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Pill className="h-4.5 w-4.5 text-emerald-600" />
+                      Active Schedules & Prescriptions
+                    </h3>
+
+                    {medSummary?.activeMedications?.length ? (
+                      <div className="space-y-3">
+                        {medSummary.activeMedications.map((m) => {
+                          const isLowStock = m.quantity !== undefined && m.quantity <= (m.refillThreshold || 5);
+                          return (
+                            <Card key={m._id} className={`p-4 border-slate-105 transition-all ${m.active === false ? 'opacity-65 bg-slate-50' : ''}`}>
+                              <div className="flex justify-between items-start gap-4">
+                                <div>
+                                  <h4 className="font-bold text-slate-800 text-sm">
+                                    {m.name} <span className="text-xs text-slate-500 font-medium">({m.genericName || 'Generic'})</span>
+                                  </h4>
+                                  <p className="text-xs text-slate-650 mt-1">
+                                    <strong>{m.dosage}</strong> • {m.form} • {m.frequency}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 mt-1">
+                                    Purpose: {m.purpose || 'Not recorded'} • Instructions: {m.foodInstruction || 'None'}
+                                  </p>
+                                </div>
+                                <div className="flex gap-1.5 flex-wrap">
+                                  <button
+                                    onClick={() => handleToggleActiveMed(m._id, m.active)}
+                                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all ${
+                                      m.active === false
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-100 hover:bg-emerald-100'
+                                        : 'bg-amber-50 text-amber-800 border-amber-100 hover:bg-amber-100'
+                                    }`}
+                                  >
+                                    {m.active === false ? 'Activate' : 'Suspend'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDiscontinueMed(m._id)}
+                                    className="text-[10px] font-bold text-rose-800 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-100"
+                                  >
+                                    Discontinue
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="mt-3 pt-2.5 border-t border-slate-105 flex flex-wrap gap-4 text-[10px] font-bold">
+                                <span className="text-slate-500">
+                                  Times: <strong className="text-slate-700">{(m.times || []).join(', ')}</strong>
+                                </span>
+                                <span className={isLowStock ? 'text-rose-600' : 'text-slate-500'}>
+                                  Stock: <strong>{m.quantity !== undefined ? `${m.quantity} pills` : 'N/A'}</strong> {isLowStock && '⚠️'}
+                                </span>
+                                <span className="text-slate-500">
+                                  Refills: <strong>{m.refillQuantity !== undefined ? m.refillQuantity : 'N/A'}</strong>
+                                </span>
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <Card className="p-8 text-center border-slate-150">
+                        <p className="text-xs text-slate-400 font-bold">No active medications found for this patient.</p>
+                      </Card>
+                    )}
                   </div>
 
-                  <div className="flex gap-1.5 self-end sm:self-auto">
-                    {m.status !== 'active' && (
-                      <button 
-                        onClick={() => toggleMedStatus(m.id, 'active')}
-                        className="text-[10px] text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 font-bold transition-all"
-                      >
-                        Resume
-                      </button>
-                    )}
-                    {m.status === 'active' && (
-                      <button 
-                        onClick={() => toggleMedStatus(m.id, 'paused')}
-                        className="text-[10px] text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 font-bold transition-all"
-                      >
-                        Pause
-                      </button>
-                    )}
-                    {m.status !== 'stopped' && (
-                      <button 
-                        onClick={() => toggleMedStatus(m.id, 'stopped')}
-                        className="text-[10px] text-rose-800 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200 font-bold transition-all"
-                      >
-                        Stop
-                      </button>
-                    )}
+                  {/* Discontinued / Inactive History */}
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                      Discontinued / Historical
+                    </h3>
+                    <Card className="p-4 border-slate-150 bg-slate-50/55 space-y-3">
+                      {medSummary?.inactiveMedications?.length ? (
+                        medSummary.inactiveMedications.map((m) => (
+                          <div key={m._id} className="text-xs pb-2.5 border-b border-slate-100 last:border-0 last:pb-0">
+                            <h4 className="font-bold text-slate-750">{m.name}</h4>
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              {m.dosage} • Discontinued on: {new Date(m.updatedAt || m.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-[11px] text-slate-400 font-medium text-center py-2">No historical prescription changes recorded.</p>
+                      )}
+                    </Card>
                   </div>
                 </div>
-              ))}
-            </div>
-          </Card>
+
+                {/* 3. Clinician Direct guidance form */}
+                <Card className="p-5 border-emerald-100 bg-emerald-50/20">
+                  <h4 className="font-bold text-emerald-950 text-xs uppercase tracking-wider mb-2">Send Medication Clinical Instruction</h4>
+                  <p className="text-[11px] text-emerald-800 leading-normal mb-3">
+                    Write customized guidelines, food rules, or warnings below. They will immediately flash on the patient's Medication Dashboard home view.
+                  </p>
+                  <form onSubmit={handleSubmitGuidance} className="space-y-3">
+                    <textarea
+                      value={guidanceText}
+                      onChange={(e) => setGuidanceText(e.target.value)}
+                      placeholder="e.g., Take Metformin exactly 15 minutes after dinner. Avoid drinking grapefruit juice while on Lipinopril."
+                      className="w-full text-xs p-3 border border-slate-205 rounded-xl bg-white focus:outline-none focus:border-emerald-500 text-slate-800"
+                      rows={2}
+                      required
+                    />
+                    <div className="flex justify-end">
+                      <Button 
+                        size="sm" 
+                        type="submit" 
+                        disabled={isSavingGuidance || !guidanceText.trim()}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs px-4"
+                      >
+                        {isSavingGuidance ? 'Sending...' : 'Transmit Guidance'}
+                      </Button>
+                    </div>
+                  </form>
+                </Card>
+
+                {/* 4. Intake Logs list */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Recent Intake Logs
+                  </h3>
+                  <Card className="p-0 overflow-hidden border-slate-150">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left">
+                        <thead className="bg-slate-50 border-b border-slate-150 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          <tr>
+                            <th className="p-3">Log Date</th>
+                            <th className="p-3">Medication</th>
+                            <th className="p-3">Intake Slot</th>
+                            <th className="p-3">Status</th>
+                            <th className="p-3">Clinical Notes / Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {medSummary?.historyLogs?.length ? (
+                            medSummary.historyLogs.slice(0, 10).map((log) => (
+                              <tr key={log._id} className="hover:bg-slate-50/50">
+                                <td className="p-3 whitespace-nowrap font-medium text-slate-500">
+                                  {new Date(log.takenAt || log.createdAt).toLocaleString()}
+                                </td>
+                                <td className="p-3 font-bold text-slate-800">
+                                  {log.medicationId?.name || 'Deleted Medication'}
+                                </td>
+                                <td className="p-3 text-slate-500">{log.timeSlot}</td>
+                                <td className="p-3">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                    log.status?.startsWith('Taken') 
+                                      ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
+                                      : log.status === 'Skipped'
+                                      ? 'bg-amber-50 text-amber-800 border-amber-100'
+                                      : 'bg-rose-50 text-rose-800 border-rose-100'
+                                  }`}>
+                                    {log.status}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-slate-650 italic">
+                                  {log.reason ? `Skipped: ${log.reason}` : ''} {log.note ? `Note: "${log.note}"` : (log.delayMinutes ? `Dose delayed ${log.delayMinutes} mins` : '—')}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={5} className="p-6 text-center text-slate-400 font-bold font-medium">No intake logs recorded.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         {/* 4. CLINICAL TIMELINE */}

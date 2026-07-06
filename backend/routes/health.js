@@ -12,11 +12,22 @@ router.post('/profile', protect, checkRole(['patient']), healthController.postPr
 router.post('/profile/vitals', protect, checkRole(['patient']), healthController.postVitals);
 
 // --- MEDICATION MANAGEMENT ---
+router.get('/medications/today', protect, checkRole(['patient']), healthController.getTodayMedications);
+router.get('/medications/history', protect, checkRole(['patient']), healthController.getHistoryMedications);
+router.get('/medications/adherence', protect, checkRole(['patient']), healthController.getAdherenceMetrics);
+router.get('/medications/refills', protect, checkRole(['patient']), healthController.getRefillStatus);
 router.post('/medications', protect, checkRole(['patient']), healthController.postMedications);
 router.delete('/medications/:id', protect, checkRole(['patient']), healthController.deleteMedications);
 router.patch('/medications/:id/status', protect, checkRole(['patient']), healthController.patchMedicationStatus);
 router.post('/medications/:id/take', protect, checkRole(['patient']), healthController.postTakeDose);
+router.post('/medications/:id/skip', protect, checkRole(['patient']), healthController.postSkipDose);
+router.post('/medications/:id/snooze', protect, checkRole(['patient']), healthController.postSnoozeDose);
 router.post('/medications/:id/refill', protect, checkRole(['patient']), healthController.postRefillMed);
+router.post('/medications/:id/refill-adjust', protect, checkRole(['patient']), healthController.postRefillAdjust);
+router.patch('/medications/:id/preferences', protect, checkRole(['patient']), healthController.patchPreferences);
+router.patch('/medications/:id/schedule', protect, checkRole(['patient']), healthController.patchSchedule);
+router.post('/medications/voice/interpret', protect, checkRole(['patient']), healthController.postVoiceInterpret);
+router.post('/medications/voice/confirm', protect, checkRole(['patient']), healthController.postVoiceConfirm);
 
 // --- APPOINTMENT MANAGEMENT ---
 router.post('/appointments', protect, checkRole(['patient']), healthController.postAppointments);

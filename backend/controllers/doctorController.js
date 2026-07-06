@@ -138,6 +138,85 @@ class DoctorController {
       next(error);
     }
   }
+
+  async getPatientMedications(req, res, next) {
+    try {
+      const Medication = require('../models/Medication');
+      const MedicineLog = require('../models/MedicineLog');
+      
+      const patientId = req.params.id;
+      const medications = await Medication.find({ userId: patientId }).sort({ createdAt: -1 }).lean();
+      const logs = await MedicineLog.find({ userId: patientId }).sort({ createdAt: -1 }).limit(100).lean();
+      
+      res.json({
+        success: true,
+        medications,
+        logs
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getMedicationsAttention(req, res, next) {
+    try {
+      const Medication = require('../models/Medication');
+      const PatientProfile = require('../models/PatientProfile');
+      const User = require('../models/User');
+      const doctorId = req.user._id;
+
+      const patientIds = await require('../repositories/doctorRepository').findAssignedPatientIds(doctorId);
+
+      const attentionItems = [];
+
+      for (const pId of patientIds) {
+        const patient = await User.findById(pId).select('name email').lean();
+        const profile = await PatientProfile.findOne({ userId: pId }).lean();
+        const medications = await Medication.find({ userId: pId, active: true }).lean();
+
+        if (!patient) continue;
+
+        medications.forEach(med => {
+          if (med.quantity !== undefined && med.quantity <= med.refillThreshold) {
+            attentionItems.push({
+              id: `${med._id}_refill`,
+              patientId: pId,
+              patientName: patient.name,
+              medicine: med.name,
+              reason: 'Refill Overdue / Low Stock',
+              severity: med.quantity === 0 ? 'High' : 'Moderate',
+              timeWindow: 'Supply critical',
+              evidence: `Only ${med.quantity} pills remaining. Threshold: ${med.refillThreshold}.`,
+              recommendedAction: 'Approve prescription renewal or notify patient to refill stock.',
+              status: 'pending'
+            });
+          }
+
+          if (profile && profile.healthScore < 80) {
+            const exists = attentionItems.some(item => item.patientId.toString() === pId.toString() && item.reason === 'Sustained Non-Adherence');
+            if (!exists) {
+              attentionItems.push({
+                id: `${pId}_adherence`,
+                patientId: pId,
+                patientName: patient.name,
+                medicine: med.name,
+                reason: 'Sustained Non-Adherence',
+                severity: profile.healthScore < 70 ? 'High' : 'Moderate',
+                timeWindow: 'Last 7 Days',
+                evidence: `Patient health/adherence score has dropped to ${profile.healthScore}%.`,
+                recommendedAction: 'Schedule a review consultation to assess adherence barriers.',
+                status: 'pending'
+              });
+            }
+          }
+        });
+      }
+
+      res.json({ success: true, attentionList: attentionItems });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = new DoctorController();

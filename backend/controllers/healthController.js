@@ -10,6 +10,11 @@ const Notification = require('../models/Notification');
 const MedicineLog = require('../models/MedicineLog');
 const geminiService = require('../services/geminiService');
 const whatsappService = require('../services/whatsappService');
+const DoseInstance = require('../models/DoseInstance');
+const doseInstanceEngine = require('../services/medication/DoseInstanceEngine');
+const responseProcessingEngine = require('../services/medication/ResponseProcessingEngine');
+const refillEngine = require('../services/medication/RefillEngine');
+const voiceIntentEngine = require('../services/medication/VoiceIntentEngine');
 
 // --- PATIENT HEALTH DASHBOARD AGGREGATION ---
 exports.getPatientDashboard = async (req, res, next) => {
@@ -202,61 +207,6 @@ exports.patchMedicationStatus = async (req, res, next) => {
       title: active ? 'Medication Resumed' : 'Medication Paused',
       message: `Medication schedule for ${medication.name} was ${active ? 'resumed' : 'paused'}.`,
       priority: 'low'
-    });
-
-    res.json(medication);
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.postTakeDose = async (req, res, next) => {
-  const { timeSlot } = req.body;
-  try {
-    const medication = await Medication.findOne({ _id: req.params.id, userId: req.user._id });
-    if (!medication) {
-      return res.status(404).json({ success: false, message: 'Medication reminder not found.' });
-    }
-
-    medication.adherence.taken += 1;
-    medication.adherence.target += 1;
-    if (medication.quantity > 0) {
-      medication.quantity -= 1;
-    }
-    medication.adherenceLogs.push({
-      takenAt: new Date(),
-      timeSlot: timeSlot || 'daily'
-    });
-    await medication.save();
-
-    // Create database log entry
-    await MedicineLog.create({
-      userId: req.user._id,
-      medicationId: medication._id,
-      timeSlot: timeSlot || 'daily',
-      takenAt: new Date(),
-      delayMinutes: 0,
-      skipped: false,
-      source: 'manual'
-    });
-
-    const profile = await PatientProfile.findOne({ userId: req.user._id });
-    if (profile && profile.healthScore < 100) {
-      profile.healthScore = Math.min(profile.healthScore + 2, 100);
-      await profile.save();
-    }
-
-    await whatsappService.sendMessage(
-      profile?.phone || 'Patient Phone',
-      `Helio Care: Intake of ${medication.name} registered. Remaining pill stock: ${medication.quantity}.`
-    );
-
-    // Audit Log
-    await AuditLog.create({
-      actorId: req.user._id,
-      action: 'MED_TAKE',
-      details: { medicationId: medication._id, name: medication.name, quantity: medication.quantity },
-      ipAddress: req.ip
     });
 
     res.json(medication);
@@ -838,6 +788,470 @@ exports.deleteNotification = async (req, res, next) => {
   try {
     await Notification.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
     res.json({ success: true, message: 'Notification removed.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// --- NEW MEDICATION CARE METHODS ---
+
+exports.getTodayMedications = async (req, res, next) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Dynamic self-healing: if no instances generated for today, generate them first!
+    let doses = await DoseInstance.find({
+      patientId: req.user._id,
+      expectedTime: { $gte: today, $lt: tomorrow }
+    }).populate('medicationId').lean();
+
+    if (doses.length === 0) {
+      await doseInstanceEngine.generateRollingInstances(req.user._id);
+      doses = await DoseInstance.find({
+        patientId: req.user._id,
+        expectedTime: { $gte: today, $lt: tomorrow }
+      }).populate('medicationId').lean();
+    }
+
+    const doseInstances = doses.map(dose => ({
+      id: dose._id,
+      medicationId: dose.medicationId?._id,
+      name: dose.medicationId?.name || dose.dosage || 'Medication',
+      genericName: dose.medicationId?.genericName || '',
+      form: dose.form || 'tablet',
+      dosage: dose.dosage,
+      purpose: dose.medicationId?.purpose || '',
+      foodInstruction: dose.medicationId?.foodInstruction || 'none',
+      specialInstructions: dose.medicationId?.specialInstructions || '',
+      timeSlot: dose.localTime,
+      scheduledTime: dose.localTime,
+      status: dose.status,
+      takenAt: dose.takenAt,
+      reason: dose.skipReason || '',
+      note: dose.notes || '',
+      isAsNeeded: dose.medicationId?.frequency === 'As Needed'
+    }));
+
+    res.json({ success: true, date: today, doseInstances });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getHistoryMedications = async (req, res, next) => {
+  const { startDate, endDate, status, medicineId } = req.query;
+  try {
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+
+    const filter = {
+      patientId: req.user._id,
+      expectedTime: { $gte: start, $lte: end }
+    };
+    if (medicineId) {
+      filter.medicationId = medicineId;
+    }
+    if (status) {
+      filter.status = status;
+    }
+
+    const doses = await DoseInstance.find(filter).populate('medicationId').sort({ expectedTime: -1 }).lean();
+    
+    // Map to logs for compatibility with old interface
+    const logs = doses.map(d => ({
+      _id: d._id,
+      medicationId: d.medicationId,
+      timeSlot: d.localTime,
+      scheduledTime: d.localTime,
+      scheduledDate: d.expectedTime,
+      status: d.status,
+      takenAt: d.takenAt,
+      delayMinutes: d.delayMinutes,
+      skipped: d.status === 'SKIPPED',
+      reason: d.skipReason,
+      note: d.notes,
+      createdAt: d.createdAt
+    }));
+
+    res.json({ success: true, logs });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getAdherenceMetrics = async (req, res, next) => {
+  const { range = 30 } = req.query;
+  try {
+    const rangeDays = Number(range) || 30;
+    const start = new Date();
+    start.setDate(start.getDate() - rangeDays);
+    start.setHours(0, 0, 0, 0);
+
+    const medications = await Medication.find({ userId: req.user._id }).lean();
+    const doses = await DoseInstance.find({
+      patientId: req.user._id,
+      expectedTime: { $gte: start },
+      status: { $ne: 'CANCELLED' }
+    }).lean();
+
+    let totalExpected = 0;
+    let totalTaken = 0;
+    let totalSkipped = 0;
+    let totalMissed = 0;
+
+    const asNeededIds = new Set(
+      medications.filter(m => m.frequency === 'As Needed' || m.frequency === 'as-needed').map(m => m._id.toString())
+    );
+
+    const breakdown = medications.map(med => {
+      const medDoses = doses.filter(d => d.medicationId.toString() === med._id.toString());
+      const isAsNeeded = asNeededIds.has(med._id.toString());
+
+      const medExpected = isAsNeeded ? 0 : medDoses.length;
+      const taken = medDoses.filter(d => d.status === 'TAKEN_ON_TIME' || d.status === 'TAKEN_LATE').length;
+      const skipped = medDoses.filter(d => d.status === 'SKIPPED').length;
+      const missed = medDoses.filter(d => d.status === 'MISSED').length;
+
+      if (!isAsNeeded) {
+        totalExpected += medExpected;
+        totalTaken += taken;
+        totalSkipped += skipped;
+        totalMissed += missed;
+      }
+
+      const adherenceRate = medExpected > 0 ? Math.round((taken / medExpected) * 100) : 100;
+
+      return {
+        medicineId: med._id,
+        name: med.name,
+        expected: medExpected,
+        taken,
+        skipped,
+        missed,
+        adherenceRate
+      };
+    });
+
+    const overallAdherence = totalExpected > 0 ? Math.round((totalTaken / totalExpected) * 100) : 100;
+
+    res.json({
+      success: true,
+      overallAdherence,
+      totalExpected,
+      totalTaken,
+      totalSkipped,
+      totalMissed,
+      breakdown
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getRefillStatus = async (req, res, next) => {
+  try {
+    const medications = await Medication.find({ userId: req.user._id }).lean();
+    const refillData = medications.map(med => {
+      const qty = med.quantity || 0;
+      const threshold = med.refillThreshold || 5;
+      const timesPerDay = med.times?.length || 1;
+      
+      let daysRemaining = 'N/A';
+      let runOutDate = 'N/A';
+      let confidence = 'Low (No schedule)';
+
+      if (med.frequency !== 'As Needed' && med.frequency !== 'as-needed' && timesPerDay > 0) {
+        daysRemaining = Math.max(0, Math.floor(qty / timesPerDay));
+        const runOut = new Date();
+        runOut.setDate(runOut.getDate() + daysRemaining);
+        runOutDate = runOut.toISOString().split('T')[0];
+        confidence = qty > 10 ? 'High' : 'Moderate';
+      }
+
+      return {
+        medicineId: med._id,
+        name: med.name,
+        quantity: qty,
+        refillThreshold: threshold,
+        refillReminderEnabled: med.refillReminderEnabled !== false,
+        daysRemaining,
+        runOutDate,
+        confidence,
+        isLowStock: qty <= threshold
+      };
+    });
+
+    res.json({ success: true, refillData });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.postTakeDose = async (req, res, next) => {
+  const { timeSlot, note } = req.body;
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+
+    let dose = await DoseInstance.findOne({
+      patientId: req.user._id,
+      medicationId: req.params.id,
+      localTime: timeSlot || '08:00',
+      expectedTime: { $gte: todayStart, $lt: todayEnd }
+    });
+
+    if (!dose) {
+      // Dynamic generation for As Needed or custom unscheduled takes
+      const med = await Medication.findById(req.params.id);
+      if (!med) {
+        return res.status(404).json({ success: false, message: 'Medication not found.' });
+      }
+
+      dose = await DoseInstance.create({
+        patientId: req.user._id,
+        medicationId: med._id,
+        scheduleVersion: med.scheduleVersion || 1,
+        expectedTime: new Date(),
+        localTime: timeSlot || 'As Needed',
+        timezone: 'UTC',
+        dosage: med.dosage,
+        form: med.form || 'tablet',
+        status: 'SCHEDULED',
+        idempotencyKey: `asneeded_${req.user._id}_${med._id}_${Date.now()}`
+      });
+    }
+
+    const updatedDose = await responseProcessingEngine.processResponse({
+      patientId: req.user._id,
+      doseInstanceId: dose._id,
+      intent: 'TAKEN',
+      source: 'manual',
+      note
+    });
+
+    res.json(updatedDose);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.postSkipDose = async (req, res, next) => {
+  const { timeSlot, reason, note } = req.body;
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+
+    const dose = await DoseInstance.findOne({
+      patientId: req.user._id,
+      medicationId: req.params.id,
+      localTime: timeSlot || '08:00',
+      expectedTime: { $gte: todayStart, $lt: todayEnd }
+    });
+
+    if (!dose) {
+      return res.status(404).json({ success: false, message: 'Scheduled dose instance not found to skip.' });
+    }
+
+    const updatedDose = await responseProcessingEngine.processResponse({
+      patientId: req.user._id,
+      doseInstanceId: dose._id,
+      intent: 'SKIP',
+      source: 'manual',
+      reason,
+      note
+    });
+
+    res.json({ success: true, log: updatedDose });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.postSnoozeDose = async (req, res, next) => {
+  const { durationMinutes = 15, timeSlot } = req.body;
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayEnd.getDate() + 1);
+
+    const query = {
+      patientId: req.user._id,
+      medicationId: req.params.id,
+      expectedTime: { $gte: todayStart, $lt: todayEnd }
+    };
+    if (timeSlot) {
+      query.localTime = timeSlot;
+    }
+
+    const dose = await DoseInstance.findOne(query);
+
+    if (!dose) {
+      return res.status(404).json({ success: false, message: 'Dose instance not found to snooze.' });
+    }
+
+    const updatedDose = await responseProcessingEngine.processResponse({
+      patientId: req.user._id,
+      doseInstanceId: dose._id,
+      intent: 'SNOOZE',
+      source: 'manual',
+      durationMinutes
+    });
+
+    res.json({ success: true, medication: updatedDose });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.postRefillAdjust = async (req, res, next) => {
+  const { quantity, refillThreshold, refillReminderEnabled } = req.body;
+  try {
+    const medication = await Medication.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!medication) {
+      return res.status(404).json({ success: false, message: 'Medication not found.' });
+    }
+
+    if (quantity !== undefined) {
+      // ledger audit update
+      const diff = Number(quantity) - (medication.quantity || 0);
+      await refillEngine.recordRefill(req.user._id, medication._id, diff, {
+        actorId: req.user._id,
+        reason: 'Manual adjustment override'
+      });
+    }
+    if (refillThreshold !== undefined) medication.refillThreshold = Number(refillThreshold);
+    if (refillReminderEnabled !== undefined) medication.refillReminderEnabled = !!refillReminderEnabled;
+
+    await medication.save();
+
+    res.json({ success: true, medication });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.patchPreferences = async (req, res, next) => {
+  const { channels, leadTimeMinutes, quietHoursStart, quietHoursEnd, version } = req.body;
+  try {
+    const medication = await Medication.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!medication) {
+      return res.status(404).json({ success: false, message: 'Medication not found.' });
+    }
+
+    // Optimistic Concurrency Control check
+    const clientVersion = req.headers['if-match'] || version;
+    if (clientVersion !== undefined && medication.__v !== Number(clientVersion)) {
+      return res.status(409).json({ 
+        success: false, 
+        message: 'Conflict: The medication document has been modified by another process. Please reload.' 
+      });
+    }
+
+    medication.reminderPreferences = {
+      ...medication.reminderPreferences,
+      ...(channels !== undefined && { channels }),
+      ...(leadTimeMinutes !== undefined && { leadTimeMinutes }),
+      ...(quietHoursStart !== undefined && { quietHoursStart }),
+      ...(quietHoursEnd !== undefined && { quietHoursEnd })
+    };
+
+    await medication.save();
+
+    res.json({ success: true, medication });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.patchSchedule = async (req, res, next) => {
+  const { times, frequency, version } = req.body;
+  try {
+    const medication = await Medication.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!medication) {
+      return res.status(404).json({ success: false, message: 'Medication not found.' });
+    }
+
+    // Optimistic Concurrency Control check
+    const clientVersion = req.headers['if-match'] || version;
+    if (clientVersion !== undefined && medication.__v !== Number(clientVersion)) {
+      return res.status(409).json({ 
+        success: false, 
+        message: 'Conflict: The medication document has been modified by another process. Please reload.' 
+      });
+    }
+
+    medication.scheduleHistory = medication.scheduleHistory || [];
+    medication.scheduleHistory.push({
+      version: medication.scheduleVersion || 1,
+      frequency: medication.frequency,
+      times: medication.times,
+      changedAt: new Date()
+    });
+
+    medication.scheduleVersion = (medication.scheduleVersion || 1) + 1;
+    if (times) medication.times = times;
+    if (frequency) medication.frequency = frequency;
+
+    await medication.save();
+
+    // Invalidate future dose instances for this schedule and regenerate them!
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    await DoseInstance.deleteMany({
+      patientId: req.user._id,
+      medicationId: medication._id,
+      expectedTime: { $gte: today },
+      status: 'SCHEDULED'
+    });
+    await doseInstanceEngine.generateRollingInstances(req.user._id);
+
+    await Notification.create({
+      userId: req.user._id,
+      category: 'medicine',
+      title: 'Medication Schedule Changed',
+      message: `Your dosing schedule for ${medication.name} has been updated to version ${medication.scheduleVersion}.`,
+      priority: 'medium'
+    });
+
+    await AuditLog.create({
+      actorId: req.user._id,
+      action: 'MED_SCHEDULE_CHANGE',
+      details: { medicationId: medication._id, version: medication.scheduleVersion, frequency, times },
+      ipAddress: req.ip
+    });
+
+    res.json({ success: true, medication });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Voice recognition commands interpret and confirm endpoints
+exports.postVoiceInterpret = async (req, res, next) => {
+  const { transcript } = req.body;
+  try {
+    const interpretation = await voiceIntentEngine.interpretTranscript(req.user._id, transcript);
+    res.json(interpretation);
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.postVoiceConfirm = async (req, res, next) => {
+  const { command } = req.body;
+  try {
+    const dose = await responseProcessingEngine.processResponse(command);
+    res.json({ success: true, dose });
   } catch (error) {
     next(error);
   }
