@@ -1,0 +1,75 @@
+# ================================================================
+# HELIO Platform — Docker Compose Development Override
+# ================================================================
+# This file EXTENDS docker-compose.yml for local development.
+# It mounts source code as volumes for hot-reload without rebuilds.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# This gives you:
+#   - Live code reloading via nodemon for the backend
+#   - Local source mounting (no full rebuilds on code change)
+#   - Development environment variables
+#   - Unified monolith mode (PROCESS_TYPE=all) for simplicity
+# ================================================================
+
+services:
+
+  # ── Frontend: Run Vite dev server instead of nginx ──────────────
+  helio-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      # Override to use the builder stage (has vite installed)
+      target: builder
+    ports:
+      - "5173:5173"
+    volumes:
+      # Mount source for hot module replacement
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+    environment:
+      NODE_ENV: development
+    # Override CMD to use Vite dev server
+    command: ["npx", "vite", "--host", "0.0.0.0", "--port", "5173"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5173"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Backend: Unified monolith with hot-reload via nodemon ───────
+  helio-api:
+    env_file:
+      - ./backend/.env.development
+    environment:
+      PROCESS_TYPE: all
+      NODE_ENV: development
+    volumes:
+      # Mount backend source for live reloading
+      - ./backend:/app
+      # Exclude node_modules from the mount (use image's installed modules)
+      - /app/node_modules
+      - /app/storage
+    # Override to use nodemon for hot-reload
+    command: ["npx", "nodemon", "server.js"]
+    # Remove port conflicts from separate worker services
+    ports:
+      - "5000:5000"
+
+  # ── Disable separate worker/scheduler/outbox in dev ─────────────
+  # (They're all handled by PROCESS_TYPE=all in helio-api above)
+  helio-worker:
+    profiles:
+      - disabled
+
+  helio-scheduler:
+    profiles:
+      - disabled
+
+  helio-outbox:
+    profiles:
+      - disabled

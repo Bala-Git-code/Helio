@@ -1,4 +1,5 @@
 require('dotenv').config();
+const compression = require('compression');
 
 // 1. Fail-Fast Configuration check
 const { validateEnv } = require('./config/envValidator');
@@ -22,13 +23,20 @@ const app = express();
 // Register webhooks router before general JSON body parsing middleware
 app.use('/api/webhooks', require('./routes/webhooks'));
 
+// Trust the first reverse proxy (Nginx) for correct client IP in rate limiting
+app.set('trust proxy', 1);
+
 // Secure headers
 app.use(helmet({
   contentSecurityPolicy: false // Allow inline scripts for simpler React bundler mounts
 }));
 
-// CORS rules
-app.use(cors({ origin: true, credentials: true }));
+// Gzip compression for API responses and static assets
+app.use(compression());
+
+// CORS rules — scoped to CLIENT_URL environment variable
+const allowedOrigin = process.env.CLIENT_URL || 'http://localhost:5173';
+app.use(cors({ origin: allowedOrigin, credentials: true }));
 
 // Express JSON limit sizes
 app.use(express.json({ limit: '10mb' }));
