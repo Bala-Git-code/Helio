@@ -45,7 +45,7 @@ async function runSuite() {
     assert.ok(job);
     assert.strictEqual(job.queueName, 'test-queue');
     assert.strictEqual(job.jobType, 'test-job-type');
-    assert.strictEqual(job.status, 'pending');
+    assert.strictEqual(job.status, 'QUEUED');
     assert.strictEqual(job.priority, 10);
     console.log('  -> Enqueue operations completed successfully.');
 
@@ -80,7 +80,7 @@ async function runSuite() {
     assert.strictEqual(payloadValue, 'sample-payload');
     
     const reloadedJob = await QueueJob.findById(job._id);
-    assert.strictEqual(reloadedJob.status, 'completed', 'Completed job must transition to completed status');
+    assert.strictEqual(reloadedJob.status, 'SUCCEEDED', 'Completed job must transition to SUCCEEDED status');
     console.log('  -> Worker claimed and completed the persistent job.');
 
     // ------------------------------------------------------------
