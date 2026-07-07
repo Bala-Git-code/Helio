@@ -395,7 +395,7 @@ exports.postOCR = async (req, res, next) => {
     return res.status(400).json({ success: false, message: 'Missing base64Image payload.' });
   }
   try {
-    const medicines = await geminiService.parsePrescriptionImage(base64Image, mimeType);
+    const medicines = await geminiService.parsePrescriptionImage(base64Image, mimeType, String(req.user._id));
     res.json({ medicines });
   } catch (error) {
     next(error);

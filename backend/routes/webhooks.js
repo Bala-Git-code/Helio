@@ -68,4 +68,119 @@ router.post('/whatsapp', async (req, res) => {
   }
 });
 
+/**
+ * GitHub Ingestion Webhook Handler
+ */
+router.post('/github', async (req, res) => {
+  const signature = req.headers['x-hub-signature-256'];
+  const rawBody = req.body;
+
+  const GitHubProviderAdapter = require('../services/repository/GitHubProviderAdapter');
+  const githubAdapter = new GitHubProviderAdapter();
+
+  const secret = process.env.GITHUB_WEBHOOK_SECRET || 'test_secret';
+
+  // Signature validation check
+  req.rawBody = rawBody.toString('utf8'); // populate rawBody for adapter
+  const isValid = await githubAdapter.verifyWebhook(req, secret);
+  if (!isValid) {
+    console.warn('[Webhooks] Warning: invalid GitHub signature received. Dropping event.');
+    return res.status(401).send('Invalid signature');
+  }
+
+  // Parse JSON
+  let body;
+  try {
+    body = JSON.parse(req.rawBody);
+  } catch (err) {
+    return res.status(400).send('Invalid JSON');
+  }
+
+  // Parse details
+  let eventDetails;
+  try {
+    eventDetails = await githubAdapter.parseWebhookEvent(req.headers, body);
+  } catch (err) {
+    return res.status(400).send(err.message);
+  }
+
+  // Deduplicate using WebhookReceipt
+  const RepositoryWebhookReceipt = require('../models/RepositoryWebhookReceipt');
+  let receipt;
+  try {
+    receipt = await RepositoryWebhookReceipt.create({
+      providerId: 'github',
+      deliveryId: eventDetails.deliveryId,
+      eventType: eventDetails.eventType,
+      signatureValidated: true,
+      payloadHash: eventDetails.payloadHash,
+      status: 'PENDING',
+      traceId: req.headers['x-request-id'] || `trace_${Date.now()}`
+    });
+  } catch (err) {
+    if (err.code === 11000) {
+      console.log(`[Webhooks] Webhook delivery duplicate: ${eventDetails.deliveryId}. Skipping.`);
+      return res.status(200).send('EVENT_DUPLICATE_SKIPPED');
+    }
+    return res.status(500).send('Error saving receipt');
+  }
+
+  res.status(200).send('EVENT_RECEIVED');
+
+  // Asynchronous processing of the hook
+  try {
+    const Repository = require('../models/Repository');
+    const RepositorySync = require('../models/RepositorySync');
+
+    // Find all repositories matching the source repository ID
+    const repositories = await Repository.find({
+      providerId: 'github',
+      sourceRepositoryId: eventDetails.sourceRepositoryId
+    });
+
+    if (repositories.length === 0) {
+      receipt.status = 'FAILED';
+      receipt.errorCode = 'REPOSITORY_NOT_FOUND';
+      await receipt.save();
+      return;
+    }
+
+    for (const repo of repositories) {
+      const correlationId = receipt.traceId;
+      
+      const sync = await RepositorySync.create({
+        tenantId: repo.tenantId,
+        repositoryId: repo._id,
+        triggerType: 'WEBHOOK',
+        requestedRevision: eventDetails.resolvedRevision || eventDetails.ref,
+        status: 'QUEUED',
+        requestedBy: 'SYSTEM_WEBHOOK',
+        correlationId,
+        traceId: correlationId
+      });
+
+      await QueueService.enqueue(
+        'repository-ingestion',
+        'sync-repository-job',
+        { syncId: sync._id },
+        {
+          tenantId: repo.tenantId,
+          correlationId,
+          idempotencyKey: `sync_webhook_${repo._id}_${eventDetails.deliveryId}`,
+          maxAttempts: 3
+        }
+      );
+    }
+
+    receipt.status = 'PROCESSED';
+    receipt.processedAt = new Date();
+    await receipt.save();
+  } catch (err) {
+    console.error('[Webhooks] Failed processing GitHub webhook:', err.message);
+    receipt.status = 'FAILED';
+    receipt.errorCode = err.message;
+    await receipt.save();
+  }
+});
+
 module.exports = router;

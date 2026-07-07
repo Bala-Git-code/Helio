@@ -59,6 +59,15 @@ async function runIdempotentInbox(consumerName, eventId, fn) {
 // ------------------------------------------------------------
 
 JobHandlerRegistry.register({
+  jobType: 'sync-repository-job',
+  execute: async (context, payload) => {
+    const { syncId } = payload;
+    const IngestionPipelineOrchestrator = require('./services/repository/IngestionPipelineOrchestrator');
+    await IngestionPipelineOrchestrator.runSyncPipeline(syncId, context);
+  }
+});
+
+JobHandlerRegistry.register({
   jobType: 'trigger-rolling-generation',
   execute: async (context, payload) => {
     const { patientId, horizonDays = 7 } = payload;
@@ -345,6 +354,11 @@ QueueService.registerWorker('doctor-attention', 2, async (job, context) => {
 
 QueueService.registerWorker('timeline-projection', 2, async (job, context) => {
   const handler = JobHandlerRegistry.getHandler('sync-timeline');
+  await handler.execute(context, job.payload);
+});
+
+QueueService.registerWorker('repository-ingestion', 2, async (job, context) => {
+  const handler = JobHandlerRegistry.getHandler('sync-repository-job');
   await handler.execute(context, job.payload);
 });
 
