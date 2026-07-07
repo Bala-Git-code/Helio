@@ -4,13 +4,33 @@ const roleCapabilities = {
     'jobs:read:any-tenant',
     'jobs:retry',
     'jobs:cancel',
-    'workers:read'
+    'workers:read',
+    'ai:execute',
+    'ai:execute:task',
+    'ai:override-model',
+    'ai:executions:read',
+    'ai:executions:read:any-tenant',
+    'ai:usage:read',
+    'ai:budgets:read',
+    'ai:providers:read',
+    'ai:models:read',
+    'ai:circuits:read',
+    'ai:tools:execute-privileged'
   ],
   doctor: [
     'jobs:read',
-    'workers:read'
+    'workers:read',
+    'ai:execute',
+    'ai:executions:read',
+    'ai:usage:read',
+    'ai:models:read',
+    'ai:tools:execute-privileged'
   ],
-  patient: []
+  patient: [
+    'ai:execute',
+    'ai:executions:read',
+    'ai:usage:read'
+  ]
 };
 
 exports.checkCapability = (capability) => (req, res, next) => {

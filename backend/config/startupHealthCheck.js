@@ -11,6 +11,15 @@ async function verifyStartupHealth() {
   }
   console.log('[Health] ✅ MongoDB connection status verified.');
 
+  // Seed default prompts
+  try {
+    const PromptRegistry = require('../services/ai/PromptRegistry');
+    await PromptRegistry.seedDefaults();
+    console.log('[Health] ✅ Default AI prompts seeded.');
+  } catch (seedErr) {
+    console.error('[Health] Failed to seed default prompts:', seedErr);
+  }
+
   // ── 2. Redis readiness (optional — only when REDIS_URL is provided) ───────────
   const redisUrl = process.env.REDIS_URL;
   if (redisUrl) {
