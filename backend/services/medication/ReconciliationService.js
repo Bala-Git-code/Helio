@@ -3,7 +3,7 @@ const OutboxEvent = require('../../models/OutboxEvent');
 const DoseInstance = require('../../models/DoseInstance');
 const Medication = require('../../models/Medication');
 const PatientProfile = require('../../models/PatientProfile');
-const AuditLog = require('../../models/AuditLog');
+const { MetricsRegistry } = require('./observability');
 
 class ReconciliationService {
   constructor() {
@@ -50,17 +50,18 @@ class ReconciliationService {
   async recoverExpiredLeases() {
     const now = new Date();
 
-    // 1. Recover QueueJobs
+    // 1. Recover QueueJobs (uppercase states)
     const stuckJobs = await QueueJob.updateMany(
       {
-        status: 'processing',
+        status: { $in: ['CLAIMED', 'RUNNING', 'CANCELLATION_REQUESTED'] },
         lockedUntil: { $lte: now }
       },
       {
         $set: {
-          status: 'pending',
+          status: 'QUEUED',
           lockedUntil: null,
           lockedBy: null,
+          leaseToken: null,
           lastError: 'Lease expired during worker execution (stuck job recovered)'
         }
       }
@@ -68,6 +69,9 @@ class ReconciliationService {
 
     if (stuckJobs.modifiedCount > 0) {
       console.warn(`[ReconciliationService] Recovered ${stuckJobs.modifiedCount} stuck QueueJobs.`);
+      for (let i = 0; i < stuckJobs.modifiedCount; i++) {
+        MetricsRegistry.incrementStalledRecovered();
+      }
     }
 
     // 2. Recover OutboxEvents
@@ -140,9 +144,9 @@ class ReconciliationService {
     const purgeThreshold = new Date();
     purgeThreshold.setDate(purgeThreshold.getDate() - this.retentionDays);
 
-    // 1. Delete completed QueueJobs
+    // 1. Delete completed/succeeded QueueJobs
     const purgedJobs = await QueueJob.deleteMany({
-      status: 'completed',
+      status: { $in: ['SUCCEEDED', 'CANCELLED'] },
       updatedAt: { $lte: purgeThreshold }
     });
 
@@ -159,9 +163,6 @@ class ReconciliationService {
     if (purgedEvents.deletedCount > 0) {
       console.log(`[ReconciliationService] Purged ${purgedEvents.deletedCount} completed OutboxEvents.`);
     }
-
-    // 3. Purge older audit log aggregates (optional, depends on security rules)
-    // We keep audit logs unless strictly instructed, but let's keep them here.
   }
 }
 

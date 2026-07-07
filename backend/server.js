@@ -58,6 +58,7 @@ app.use('/api/doctor', require('./routes/doctors'));
 app.use('/api/doctors', require('./routes/doctors'));
 app.use('/api/documents', require('./routes/documents'));
 app.use('/api/health', require('./routes/health'));
+app.use('/api/internal', require('./routes/internal'));
 
 app.get('/api/health-check', (_req, res) => {
   res.json({ status: 'ok', service: 'helio-backend' });
