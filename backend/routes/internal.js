@@ -263,6 +263,162 @@ router.get('/metrics', protect, checkCapability('workers:read'), async (req, res
   }
 });
 
+// GET /api/internal/retrieval-indexes
+router.get('/retrieval-indexes', protect, checkCapability('repository-retrieval-index:read'), async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+    const skip = (page - 1) * limit;
+
+    const query = {};
+    if (req.query.repositoryId) {
+      query.repositoryId = req.query.repositoryId;
+    }
+
+    // Limit tenant scope unless request:any-tenant capability
+    const hasAnyTenant = req.user.role === 'admin';
+    if (!hasAnyTenant) {
+      query.tenantId = String(req.user._id);
+    }
+
+    const RepositoryRetrievalIndex = require('../models/RepositoryRetrievalIndex');
+    const total = await RepositoryRetrievalIndex.countDocuments(query);
+    const list = await RepositoryRetrievalIndex.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    res.json({
+      success: true,
+      data: list,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/internal/retrieval-indexes/:retrievalIndexId
+router.get('/retrieval-indexes/:retrievalIndexId', protect, checkCapability('repository-retrieval-index:read'), async (req, res, next) => {
+  try {
+    const RepositoryRetrievalIndex = require('../models/RepositoryRetrievalIndex');
+    const index = await RepositoryRetrievalIndex.findById(req.params.retrievalIndexId).lean();
+    if (!index) {
+      return res.status(404).json({ success: false, message: 'Retrieval index not found.' });
+    }
+
+    const hasAccess = await verifyTenantAccess(req.user, index.tenantId);
+    if (!hasAccess) {
+      return res.status(403).json({ success: false, message: 'Access denied: Tenant isolation policy violation.' });
+    }
+
+    res.json({ success: true, data: index });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/internal/repositories/:repositoryId/retrieval-index/rebuild
+router.post('/repositories/:repositoryId/retrieval-index/rebuild', protect, checkCapability('repository-retrieval-index:rebuild'), async (req, res, next) => {
+  try {
+    const tenantId = String(req.user._id);
+    const { repositoryId } = req.params;
+
+    const Repository = require('../models/Repository');
+    const repo = await Repository.findOne({ _id: repositoryId, tenantId });
+    if (!repo) {
+      return res.status(404).json({ success: false, message: 'Repository not found.' });
+    }
+
+    const snapshotId = req.body.snapshotId || repo.latestIndexedSnapshotId;
+    if (!snapshotId) {
+      return res.status(400).json({ success: false, message: 'No snapshot available to index.' });
+    }
+
+    // Queue retrieval index job
+    await QueueService.enqueue(
+      'repository-retrieval',
+      'build-retrieval-index-job',
+      { tenantId, repositoryId, snapshotId },
+      {
+        tenantId,
+        idempotencyKey: `retrieval_rebuild_${snapshotId}_${Date.now()}`,
+        maxAttempts: 3
+      }
+    );
+
+    // Audit log entry
+    await AuditLog.create({
+      actorId: req.user._id,
+      action: 'RETRIEVAL_INDEX_REBUILD_REQUESTED',
+      details: { repositoryId, snapshotId }
+    });
+
+    res.status(202).json({
+      success: true,
+      message: 'Retrieval index rebuild task successfully enqueued.'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/internal/repositories/:repositoryId/retrieval-index/recover
+router.post('/repositories/:repositoryId/retrieval-index/recover', protect, checkCapability('repository-retrieval-index:rebuild'), async (req, res, next) => {
+  try {
+    const tenantId = String(req.user._id);
+    const { repositoryId } = req.params;
+
+    const Repository = require('../models/Repository');
+    const repo = await Repository.findOne({ _id: repositoryId, tenantId });
+    if (!repo) {
+      return res.status(404).json({ success: false, message: 'Repository not found.' });
+    }
+
+    const snapshotId = req.body.snapshotId || repo.latestIndexedSnapshotId;
+    if (!snapshotId) {
+      return res.status(400).json({ success: false, message: 'No snapshot available to recover.' });
+    }
+
+    // Attempt to recover degraded state
+    const RepositoryRetrievalIndex = require('../models/RepositoryRetrievalIndex');
+    const index = await RepositoryRetrievalIndex.findOne({ tenantId, repositoryId, snapshotId }).sort({ createdAt: -1 });
+
+    if (!index || index.status !== 'FAILED') {
+      return res.status(400).json({ success: false, message: 'No failed index exists for the target snapshot to trigger recovery.' });
+    }
+
+    index.status = 'PENDING';
+    await index.save();
+
+    await QueueService.enqueue(
+      'repository-retrieval',
+      'build-retrieval-index-job',
+      { tenantId, repositoryId, snapshotId },
+      {
+        tenantId,
+        idempotencyKey: `retrieval_recover_${snapshotId}_${Date.now()}`,
+        maxAttempts: 3
+      }
+    );
+
+    // Audit log entry
+    await AuditLog.create({
+      actorId: req.user._id,
+      action: 'RETRIEVAL_INDEX_RECOVERY_REQUESTED',
+      details: { repositoryId, snapshotId, previousIndexId: index._id }
+    });
+
+    res.status(202).json({
+      success: true,
+      message: 'Retrieval index recovery task successfully enqueued.'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 const mongoose = require('mongoose');
 
 module.exports = router;

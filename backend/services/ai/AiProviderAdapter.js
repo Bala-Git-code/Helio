@@ -43,6 +43,20 @@ class AiProviderAdapter {
     throw new Error('normalizeError() must be implemented');
   }
 
+  /**
+   * Generates embedding vector for a single text input
+   */
+  async embed(request) {
+    throw new Error('embed() must be implemented');
+  }
+
+  /**
+   * Generates embedding vectors for a batch of text inputs
+   */
+  async embedBatch(request) {
+    throw new Error('embedBatch() must be implemented');
+  }
+
   async shutdown() {
     // Graceful cleanup
   }

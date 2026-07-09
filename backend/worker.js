@@ -68,6 +68,25 @@ JobHandlerRegistry.register({
 });
 
 JobHandlerRegistry.register({
+  jobType: 'build-structural-index-job',
+  execute: async (context, payload) => {
+    const { tenantId, repositoryId, snapshotId } = payload;
+    const StructuralIntelligenceEngine = require('./services/repository/StructuralIntelligenceEngine');
+    await StructuralIntelligenceEngine.buildIndex(tenantId, repositoryId, snapshotId);
+  }
+});
+
+JobHandlerRegistry.register({
+  jobType: 'build-retrieval-index-job',
+  execute: async (context, payload) => {
+    const { tenantId, repositoryId, snapshotId } = payload;
+    const RetrievalIndexOrchestrator = require('./services/repository/RetrievalIndexOrchestrator');
+    await RetrievalIndexOrchestrator.buildIndex(tenantId, repositoryId, snapshotId);
+  }
+});
+
+
+JobHandlerRegistry.register({
   jobType: 'trigger-rolling-generation',
   execute: async (context, payload) => {
     const { patientId, horizonDays = 7 } = payload;
