@@ -505,6 +505,171 @@ class AiExecutionEngine {
       throw err;
     }
   }
+
+  async embed(request) {
+    const {
+      tenantId,
+      userId = 'system',
+      text,
+      modelId = 'text-embedding-004',
+      correlationId = generateTraceId()
+    } = request;
+
+    const startedAt = new Date();
+    const model = ModelRegistry.getModel(modelId);
+    if (!model) {
+      throw new Error(`AI_MODEL_UNAVAILABLE: Model ${modelId} is not registered.`);
+    }
+
+    const providerId = model.providerId;
+    const adapter = adapters[providerId];
+    if (!adapter) {
+      throw new Error(`AI_MODEL_UNAVAILABLE: Provider ${providerId} adapter is not initialized.`);
+    }
+
+    const estInput = Math.ceil(text.length / 4);
+    const estCost = TokenEstimator.calculateCost(estInput, 0, modelId);
+
+    // 1. Policy & Budget checks
+    const tenantPolicy = await TenantPolicyManager.resolvePolicy(tenantId);
+    await TenantPolicyManager.reserveBudget(tenantId, correlationId, estCost);
+
+    // 2. Track AI execution
+    const execution = await AiExecution.create({
+      tenantId,
+      userId,
+      taskType: 'EMBEDDINGS',
+      providerId,
+      modelId,
+      status: 'PENDING',
+      executionMode: 'NON_STREAMING',
+      inputTokenEstimate: estInput,
+      estimatedCost: estCost,
+      startedAt,
+      traceId: correlationId,
+      correlationId
+    });
+
+    try {
+      execution.status = 'RUNNING';
+      await execution.save();
+
+      const response = await adapter.embed({
+        modelId,
+        text,
+        dimensions: model.dimensions
+      });
+
+      execution.providerRequestId = response.providerRequestId;
+      execution.inputTokens = response.usage.inputTokens;
+      execution.outputTokens = 0;
+      execution.totalTokens = response.usage.inputTokens;
+
+      const actualCost = TokenEstimator.calculateCost(response.usage.inputTokens, 0, modelId);
+      execution.actualCost = actualCost;
+      execution.status = 'SUCCEEDED';
+      execution.completedAt = new Date();
+      execution.durationMs = Date.now() - startedAt.getTime();
+      await execution.save();
+
+      await TenantPolicyManager.reconcileReservation(correlationId, actualCost);
+
+      return response;
+    } catch (err) {
+      execution.status = 'FAILED';
+      execution.failedAt = new Date();
+      execution.errorCode = err.name || 'AI_UNKNOWN_PROVIDER_ERROR';
+      execution.errorClassification = adapter.normalizeError ? adapter.normalizeError(err).message : 'AI_UNKNOWN_PROVIDER_ERROR';
+      await execution.save();
+
+      await TenantPolicyManager.releaseReservation(correlationId);
+      throw err;
+    }
+  }
+
+  async embedBatch(request) {
+    const {
+      tenantId,
+      userId = 'system',
+      texts,
+      modelId = 'text-embedding-004',
+      correlationId = generateTraceId()
+    } = request;
+
+    const startedAt = new Date();
+    const model = ModelRegistry.getModel(modelId);
+    if (!model) {
+      throw new Error(`AI_MODEL_UNAVAILABLE: Model ${modelId} is not registered.`);
+    }
+
+    const providerId = model.providerId;
+    const adapter = adapters[providerId];
+    if (!adapter) {
+      throw new Error(`AI_MODEL_UNAVAILABLE: Provider ${providerId} adapter is not initialized.`);
+    }
+
+    let estInput = 0;
+    texts.forEach(t => estInput += Math.ceil(t.length / 4));
+    const estCost = TokenEstimator.calculateCost(estInput, 0, modelId);
+
+    // 1. Policy & Budget checks
+    const tenantPolicy = await TenantPolicyManager.resolvePolicy(tenantId);
+    await TenantPolicyManager.reserveBudget(tenantId, correlationId, estCost);
+
+    // 2. Track AI execution
+    const execution = await AiExecution.create({
+      tenantId,
+      userId,
+      taskType: 'EMBEDDINGS',
+      providerId,
+      modelId,
+      status: 'PENDING',
+      executionMode: 'NON_STREAMING',
+      inputTokenEstimate: estInput,
+      estimatedCost: estCost,
+      startedAt,
+      traceId: correlationId,
+      correlationId
+    });
+
+    try {
+      execution.status = 'RUNNING';
+      await execution.save();
+
+      const responses = await adapter.embedBatch({
+        modelId,
+        texts,
+        dimensions: model.dimensions
+      });
+
+      let actualInputTokens = 0;
+      responses.forEach(res => actualInputTokens += res.usage.inputTokens);
+
+      execution.inputTokens = actualInputTokens;
+      execution.outputTokens = 0;
+      execution.totalTokens = actualInputTokens;
+
+      const actualCost = TokenEstimator.calculateCost(actualInputTokens, 0, modelId);
+      execution.actualCost = actualCost;
+      execution.status = 'SUCCEEDED';
+      execution.completedAt = new Date();
+      execution.durationMs = Date.now() - startedAt.getTime();
+      await execution.save();
+
+      await TenantPolicyManager.reconcileReservation(correlationId, actualCost);
+
+      return responses;
+    } catch (err) {
+      execution.status = 'FAILED';
+      execution.failedAt = new Date();
+      execution.errorCode = err.name || 'AI_UNKNOWN_PROVIDER_ERROR';
+      execution.errorClassification = adapter.normalizeError ? adapter.normalizeError(err).message : 'AI_UNKNOWN_PROVIDER_ERROR';
+      await execution.save();
+
+      await TenantPolicyManager.releaseReservation(correlationId);
+      throw err;
+    }
+  }
 }
 
 module.exports = new AiExecutionEngine();

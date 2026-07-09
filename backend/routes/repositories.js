@@ -296,4 +296,365 @@ router.get(
   }
 );
 
+const StructuralQueryService = require('../services/repository/StructuralQueryService');
+const StructuralIntelligenceEngine = require('../services/repository/StructuralIntelligenceEngine');
+const AuditLog = require('../models/AuditLog');
+
+/**
+ * Get file structure for a repository snapshot
+ */
+router.get(
+  '/:id/structure',
+  protect,
+  checkCapability('repository-structure:read'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const repo = await Repository.findOne({ _id: req.params.id, tenantId });
+      if (!repo) return res.status(404).json({ success: false, message: 'Repository not found.' });
+
+      const snapshotId = req.query.snapshotId || repo.latestIndexedSnapshotId;
+      if (!snapshotId) return res.status(400).json({ success: false, message: 'No snapshot available.' });
+
+      const filePath = req.query.filePath;
+      if (!filePath) return res.status(400).json({ success: false, message: 'Missing filePath parameter.' });
+
+      const data = await StructuralQueryService.getFileStructure(tenantId, repo._id, snapshotId, filePath);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Search and list symbols in a repository
+ */
+router.get(
+  '/:id/symbols',
+  protect,
+  checkCapability('repository-symbols:read'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const repo = await Repository.findOne({ _id: req.params.id, tenantId });
+      if (!repo) return res.status(404).json({ success: false, message: 'Repository not found.' });
+
+      const snapshotId = req.query.snapshotId || repo.latestIndexedSnapshotId;
+      if (!snapshotId) return res.status(400).json({ success: false, message: 'No snapshot available.' });
+
+      const { name, qualifiedName, symbolKind, filePath, page = 1, limit = 20 } = req.query;
+      const filters = { name, qualifiedName, symbolKind, filePath };
+
+      const data = await StructuralQueryService.findSymbols(
+        tenantId,
+        repo._id,
+        snapshotId,
+        filters,
+        Number(page),
+        Number(limit)
+      );
+      res.json({ success: true, ...data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Get detailed symbol information
+ */
+router.get(
+  '/:id/symbols/:symbolId',
+  protect,
+  checkCapability('repository-symbols:read'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const repo = await Repository.findOne({ _id: req.params.id, tenantId });
+      if (!repo) return res.status(404).json({ success: false, message: 'Repository not found.' });
+
+      const snapshotId = req.query.snapshotId || repo.latestIndexedSnapshotId;
+      if (!snapshotId) return res.status(400).json({ success: false, message: 'No snapshot available.' });
+
+      const data = await StructuralQueryService.getSymbol(tenantId, repo._id, snapshotId, req.params.symbolId);
+      if (!data) return res.status(404).json({ success: false, message: 'Symbol not found.' });
+
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Get references to a specific symbol
+ */
+router.get(
+  '/:id/symbols/:symbolId/references',
+  protect,
+  checkCapability('repository-references:read'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const repo = await Repository.findOne({ _id: req.params.id, tenantId });
+      if (!repo) return res.status(404).json({ success: false, message: 'Repository not found.' });
+
+      const snapshotId = req.query.snapshotId || repo.latestIndexedSnapshotId;
+      if (!snapshotId) return res.status(400).json({ success: false, message: 'No snapshot available.' });
+
+      const { page = 1, limit = 20 } = req.query;
+      const data = await StructuralQueryService.getSymbolReferences(
+        tenantId,
+        repo._id,
+        snapshotId,
+        req.params.symbolId,
+        Number(page),
+        Number(limit)
+      );
+      res.json({ success: true, ...data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Get incoming/outgoing relationships of a specific symbol
+ */
+router.get(
+  '/:id/symbols/:symbolId/relationships',
+  protect,
+  checkCapability('repository-graph:read'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const repo = await Repository.findOne({ _id: req.params.id, tenantId });
+      if (!repo) return res.status(404).json({ success: false, message: 'Repository not found.' });
+
+      const snapshotId = req.query.snapshotId || repo.latestIndexedSnapshotId;
+      if (!snapshotId) return res.status(400).json({ success: false, message: 'No snapshot available.' });
+
+      const { direction = 'BOTH', edgeType, maxDepth = 3 } = req.query;
+      const data = await StructuralQueryService.getSymbolRelationships(
+        tenantId,
+        repo._id,
+        snapshotId,
+        req.params.symbolId,
+        direction,
+        edgeType,
+        { maxDepth: Number(maxDepth) }
+      );
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Get module dependency graph
+ */
+router.get(
+  '/:id/dependencies',
+  protect,
+  checkCapability('repository-dependencies:read'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const repo = await Repository.findOne({ _id: req.params.id, tenantId });
+      if (!repo) return res.status(404).json({ success: false, message: 'Repository not found.' });
+
+      const snapshotId = req.query.snapshotId || repo.latestIndexedSnapshotId;
+      if (!snapshotId) return res.status(400).json({ success: false, message: 'No snapshot available.' });
+
+      const data = await StructuralQueryService.getModuleDependencies(tenantId, repo._id, snapshotId);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Get module dependency cycles
+ */
+router.get(
+  '/:id/dependencies/cycles',
+  protect,
+  checkCapability('repository-dependencies:read'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const repo = await Repository.findOne({ _id: req.params.id, tenantId });
+      if (!repo) return res.status(404).json({ success: false, message: 'Repository not found.' });
+
+      const snapshotId = req.query.snapshotId || repo.latestIndexedSnapshotId;
+      if (!snapshotId) return res.status(400).json({ success: false, message: 'No snapshot available.' });
+
+      const data = await StructuralQueryService.getDependencyCycles(tenantId, repo._id, snapshotId);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Administrative manual structural index rebuild
+ */
+router.post(
+  '/internal/:id/structural-index/rebuild',
+  protect,
+  checkCapability('repository-structure:rebuild'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const repo = await Repository.findOne({ _id: req.params.id, tenantId });
+      if (!repo) return res.status(404).json({ success: false, message: 'Repository not found.' });
+
+      const snapshotId = req.body.snapshotId || repo.latestIndexedSnapshotId;
+      if (!snapshotId) return res.status(400).json({ success: false, message: 'No snapshot available to rebuild.' });
+
+      // Enqueue structural build task
+      await QueueService.enqueue(
+        'repository-ingestion',
+        'build-structural-index-job',
+        {
+          repositoryId: repo._id,
+          tenantId,
+          snapshotId
+        },
+        {
+          tenantId,
+          idempotencyKey: `structural_rebuild_${repo._id}_${snapshotId}_${Date.now()}`,
+          maxAttempts: 3
+        }
+      );
+
+      // Audit log entry
+      await AuditLog.create({
+        actorId: req.user._id,
+        action: 'STRUCTURAL_INDEX_REBUILD_REQUESTED',
+        details: { repositoryId: repo._id, snapshotId }
+      });
+
+      res.status(202).json({
+        success: true,
+        message: 'Structural index rebuild task successfully enqueued.'
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Search repository chunks
+ */
+router.post(
+  '/:repositoryId/search',
+  protect,
+  checkCapability('repository-search:execute'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId } = req.params;
+      const { query, snapshotSelector = {}, filters = {}, topK = 10, retrievalMode = 'HYBRID', includeExplanations = true } = req.body;
+
+      const repo = await Repository.findOne({ _id: repositoryId, tenantId });
+      if (!repo) {
+        return res.status(404).json({ success: false, message: 'Repository not found.' });
+      }
+
+      const RepositoryRetrievalService = require('../services/repository/RepositoryRetrievalService');
+      const results = await RepositoryRetrievalService.search({
+        tenantId,
+        repositoryId,
+        snapshotSelector,
+        queryText: query,
+        filters,
+        topK,
+        retrievalMode,
+        includeExplanations
+      });
+
+      res.json({ success: true, data: results });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Retrieve token-budgeted context package
+ */
+router.post(
+  '/:repositoryId/context',
+  protect,
+  checkCapability('repository-context:retrieve'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId } = req.params;
+      const { query, snapshotSelector = {}, filters = {}, contextTokenBudget = 2000, retrievalPolicy = {}, includeProvenance = true } = req.body;
+
+      const repo = await Repository.findOne({ _id: repositoryId, tenantId });
+      if (!repo) {
+        return res.status(404).json({ success: false, message: 'Repository not found.' });
+      }
+
+      const RepositoryRetrievalService = require('../services/repository/RepositoryRetrievalService');
+      const result = await RepositoryRetrievalService.retrieveContext({
+        tenantId,
+        repositoryId,
+        snapshotSelector,
+        queryText: query,
+        filters,
+        contextTokenBudget,
+        retrievalPolicy,
+        includeProvenance
+      });
+
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Retrieve similar code snippets
+ */
+router.post(
+  '/:repositoryId/similar-code',
+  protect,
+  checkCapability('repository-similar-code:execute'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId } = req.params;
+      const { documentId, snapshotSelector = {}, limit = 5 } = req.body;
+
+      const repo = await Repository.findOne({ _id: repositoryId, tenantId });
+      if (!repo) {
+        return res.status(404).json({ success: false, message: 'Repository not found.' });
+      }
+
+      const RepositoryRetrievalService = require('../services/repository/RepositoryRetrievalService');
+      const results = await RepositoryRetrievalService.findSimilarCode({
+        tenantId,
+        repositoryId,
+        snapshotSelector,
+        documentId,
+        limit
+      });
+
+      res.json({ success: true, data: results });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 module.exports = router;

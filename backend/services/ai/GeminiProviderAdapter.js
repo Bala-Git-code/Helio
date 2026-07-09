@@ -322,6 +322,100 @@ class GeminiProviderAdapter extends AiProviderAdapter {
       };
     }
   }
+
+  async embed(request) {
+    if (!this.genAI) {
+      return this._simulateEmbed(request);
+    }
+
+    try {
+      const model = this.genAI.getGenerativeModel({ model: request.modelId });
+      const result = await model.embedContent(request.text);
+      if (!result || !result.embedding || !result.embedding.values) {
+        throw new Error('Invalid embedding response from provider.');
+      }
+      const inputTokens = Math.ceil(request.text.length / 4);
+      return {
+        vector: result.embedding.values,
+        usage: {
+          inputTokens,
+          totalTokens: inputTokens
+        },
+        providerRequestId: `gemini-embed-${Date.now()}`
+      };
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
+  }
+
+  async embedBatch(request) {
+    if (!this.genAI) {
+      return this._simulateEmbedBatch(request);
+    }
+
+    try {
+      const model = this.genAI.getGenerativeModel({ model: request.modelId });
+      const results = await Promise.all(
+        request.texts.map(text => model.embedContent(text))
+      );
+      return results.map((res, i) => {
+        if (!res || !res.embedding || !res.embedding.values) {
+          throw new Error(`Invalid embedding response at index ${i} from provider.`);
+        }
+        const inputTokens = Math.ceil(request.texts[i].length / 4);
+        return {
+          vector: res.embedding.values,
+          usage: {
+            inputTokens,
+            totalTokens: inputTokens
+          }
+        };
+      });
+    } catch (error) {
+      throw this.normalizeError(error);
+    }
+  }
+
+  _simulateEmbed(request) {
+    const text = request.text || '';
+    const dimensions = request.dimensions || 768;
+    const vector = this._generateDeterministicMockVector(text, dimensions);
+    const inputTokens = Math.ceil(text.length / 4);
+    return {
+      vector,
+      usage: { inputTokens, totalTokens: inputTokens },
+      providerRequestId: `sim-embed-${Date.now()}`
+    };
+  }
+
+  _simulateEmbedBatch(request) {
+    const texts = request.texts || [];
+    const dimensions = request.dimensions || 768;
+    return texts.map(text => {
+      const vector = this._generateDeterministicMockVector(text, dimensions);
+      const inputTokens = Math.ceil(text.length / 4);
+      return {
+        vector,
+        usage: { inputTokens, totalTokens: inputTokens }
+      };
+    });
+  }
+
+  _generateDeterministicMockVector(text, dimensions) {
+    const crypto = require('crypto');
+    const hash = crypto.createHash('sha256').update(text).digest();
+    const vector = [];
+    for (let i = 0; i < dimensions; i++) {
+      const val1 = hash[i % hash.length];
+      const val2 = hash[(i + 1) % hash.length];
+      const factor = (val1 * 256 + val2) / 65535;
+      vector.push(factor * 2 - 1);
+    }
+    let sumSq = 0;
+    for (const v of vector) sumSq += v * v;
+    const norm = Math.sqrt(sumSq) || 1;
+    return vector.map(v => v / norm);
+  }
 }
 
 module.exports = GeminiProviderAdapter;

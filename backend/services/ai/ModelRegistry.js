@@ -66,6 +66,30 @@ const models = {
     currency: 'USD',
     latencyClass: 'MEDIUM',
     qualityClass: 'HIGH'
+  },
+  'text-embedding-004': {
+    providerId: 'gemini',
+    modelId: 'text-embedding-004',
+    displayName: 'Google Text Embedding 004',
+    enabled: true,
+    dimensions: 768,
+    capabilities: [
+      capabilities.EMBEDDINGS
+    ],
+    contextWindow: 2048,
+    maxOutputTokens: 0,
+    supportsStreaming: false,
+    supportsTools: false,
+    supportsStructuredOutput: false,
+    supportsVision: false,
+    supportsReasoning: false,
+    inputTokenCost: 0.000000025,
+    outputTokenCost: 0,
+    cachedInputTokenCost: 0,
+    reasoningTokenCost: 0,
+    currency: 'USD',
+    latencyClass: 'LOW',
+    qualityClass: 'STANDARD'
   }
 };
 

@@ -46,6 +46,17 @@ const tasks = {
     defaultTemperature: 0.1,
     cachePolicy: { enabled: true, ttlSeconds: 86400 },
     retryPolicy: { maxAttempts: 3, backoffFactor: 2 }
+  },
+  EMBEDDINGS: {
+    taskType: 'EMBEDDINGS',
+    description: 'Generates vector representations of text snippets.',
+    requiredCapabilities: [Capabilities.EMBEDDINGS],
+    allowedExecutionModes: ['NON_STREAMING'],
+    defaultTimeout: 10000,
+    defaultMaxOutputTokens: 0,
+    defaultTemperature: 0.0,
+    cachePolicy: { enabled: true, ttlSeconds: 86400 },
+    retryPolicy: { maxAttempts: 3, backoffFactor: 2 }
   }
 };
 

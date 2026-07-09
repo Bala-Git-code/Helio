@@ -370,6 +370,14 @@ class IngestionPipelineOrchestrator {
       snapshot.completedAt = new Date();
       await snapshot.save();
 
+      // Trigger structural indexing
+      const StructuralIntelligenceEngine = require('./StructuralIntelligenceEngine');
+      try {
+        await StructuralIntelligenceEngine.buildIndex(sync.tenantId, repo._id, snapshot._id, workspacePath);
+      } catch (structErr) {
+        this.logger.error('repository.structure.failed', `Structural indexing failed: ${structErr.message}`);
+      }
+
       repo.status = 'READY';
       repo.syncStatus = 'SUCCESS';
       repo.indexStatus = 'SUCCESS';

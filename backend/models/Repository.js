@@ -73,6 +73,10 @@ const RepositorySchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'RepositorySnapshot'
     },
+    latestRetrievalIndexId: {
+      type: Schema.Types.ObjectId,
+      ref: 'RepositoryRetrievalIndex'
+    },
     lastSyncRequestedAt: {
       type: Date
     },

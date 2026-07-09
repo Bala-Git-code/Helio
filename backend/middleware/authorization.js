@@ -15,7 +15,20 @@ const roleCapabilities = {
     'ai:providers:read',
     'ai:models:read',
     'ai:circuits:read',
-    'ai:tools:execute-privileged'
+    'ai:tools:execute-privileged',
+    'repository-structure:read',
+    'repository-symbols:read',
+    'repository-references:read',
+    'repository-dependencies:read',
+    'repository-graph:read',
+    'repository-structure:rebuild',
+    'repository-structure:read:any-tenant',
+    'repository-search:execute',
+    'repository-context:retrieve',
+    'repository-similar-code:execute',
+    'repository-retrieval-index:read',
+    'repository-retrieval-index:rebuild',
+    'repository-retrieval-index:read:any-tenant'
   ],
   doctor: [
     'jobs:read',
@@ -24,12 +37,24 @@ const roleCapabilities = {
     'ai:executions:read',
     'ai:usage:read',
     'ai:models:read',
-    'ai:tools:execute-privileged'
+    'ai:tools:execute-privileged',
+    'repository-structure:read',
+    'repository-symbols:read',
+    'repository-references:read',
+    'repository-dependencies:read',
+    'repository-graph:read',
+    'repository-search:execute',
+    'repository-context:retrieve',
+    'repository-similar-code:execute',
+    'repository-retrieval-index:read'
   ],
   patient: [
     'ai:execute',
     'ai:executions:read',
-    'ai:usage:read'
+    'ai:usage:read',
+    'repository-search:execute',
+    'repository-context:retrieve',
+    'repository-similar-code:execute'
   ]
 };
 
