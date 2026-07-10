@@ -57,6 +57,17 @@ const tasks = {
     defaultTemperature: 0.0,
     cachePolicy: { enabled: true, ttlSeconds: 86400 },
     retryPolicy: { maxAttempts: 3, backoffFactor: 2 }
+  },
+  REPOSITORY_QA: {
+    taskType: 'REPOSITORY_QA',
+    description: 'Grounded repository question answering and code explanation.',
+    requiredCapabilities: [Capabilities.TEXT_GENERATION, Capabilities.STRUCTURED_OUTPUT],
+    allowedExecutionModes: ['NON_STREAMING'],
+    defaultTimeout: 30000,
+    defaultMaxOutputTokens: 4096,
+    defaultTemperature: 0.1,
+    cachePolicy: { enabled: true, ttlSeconds: 7200 },
+    retryPolicy: { maxAttempts: 3, backoffFactor: 2 }
   }
 };
 

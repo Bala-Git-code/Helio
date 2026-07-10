@@ -657,4 +657,338 @@ router.post(
   }
 );
 
+/**
+ * Create a new conversation
+ */
+router.post(
+  '/:repositoryId/conversations',
+  protect,
+  checkCapability('repository-conversation:create'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId } = req.params;
+      const { title, defaultSnapshotPolicy, pinnedSnapshotId } = req.body;
+
+      const repo = await Repository.findOne({ _id: repositoryId, tenantId });
+      if (!repo) return res.status(404).json({ success: false, message: 'Repository not found.' });
+
+      const RepositoryConversation = require('../models/RepositoryConversation');
+      const conversation = await RepositoryConversation.create({
+        tenantId,
+        repositoryId,
+        title: title || 'New Session',
+        defaultSnapshotPolicy: defaultSnapshotPolicy || 'LATEST_READY_PER_REQUEST',
+        pinnedSnapshotId,
+        createdBy: 'user',
+        status: 'ACTIVE'
+      });
+
+      res.status(201).json({ success: true, data: conversation });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * List conversations for a repository
+ */
+router.get(
+  '/:repositoryId/conversations',
+  protect,
+  checkCapability('repository-conversation:read'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId } = req.params;
+      const page = parseInt(req.query.page, 10) || 1;
+      const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+      const skip = (page - 1) * limit;
+
+      const repo = await Repository.findOne({ _id: repositoryId, tenantId });
+      if (!repo) return res.status(404).json({ success: false, message: 'Repository not found.' });
+
+      const RepositoryConversation = require('../models/RepositoryConversation');
+      const total = await RepositoryConversation.countDocuments({ tenantId, repositoryId, status: 'ACTIVE' });
+      const list = await RepositoryConversation.find({ tenantId, repositoryId, status: 'ACTIVE' })
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+      res.json({
+        success: true,
+        data: list,
+        pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * View conversation detail & messages
+ */
+router.get(
+  '/:repositoryId/conversations/:conversationId',
+  protect,
+  checkCapability('repository-conversation:read'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId, conversationId } = req.params;
+
+      const conversation = await require('../models/RepositoryConversation').findOne({ _id: conversationId, tenantId, repositoryId });
+      if (!conversation) return res.status(404).json({ success: false, message: 'Conversation not found.' });
+
+      const messages = await require('../models/RepositoryConversationMessage').find({ conversationId })
+        .sort({ createdAt: 1 })
+        .lean();
+
+      res.json({
+        success: true,
+        data: {
+          conversation,
+          messages
+        }
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Archive a conversation
+ */
+router.post(
+  '/:repositoryId/conversations/:conversationId/archive',
+  protect,
+  checkCapability('repository-conversation:archive'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId, conversationId } = req.params;
+
+      const conversation = await require('../models/RepositoryConversation').findOne({ _id: conversationId, tenantId, repositoryId });
+      if (!conversation) return res.status(404).json({ success: false, message: 'Conversation not found.' });
+
+      conversation.status = 'ARCHIVED';
+      conversation.archivedAt = new Date();
+      await conversation.save();
+
+      res.json({ success: true, message: 'Conversation archived successfully.' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Send message / continue conversation
+ */
+router.post(
+  '/:repositoryId/conversations/:conversationId/messages',
+  protect,
+  checkCapability('repository-conversation:write'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId, conversationId } = req.params;
+      const { query, snapshotSelector = {}, retrievalPolicy = {} } = req.body;
+
+      const RepositoryAIService = require('../services/repository/RepositoryAIService');
+      const response = await RepositoryAIService.askRepository({
+        tenantId,
+        repositoryId,
+        conversationId,
+        query,
+        snapshotSelector,
+        retrievalPolicy
+      });
+
+      res.json(response);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Grounded AI Q&A Endpoint
+ */
+router.post(
+  '/:repositoryId/ai/ask',
+  protect,
+  checkCapability('repository-ai:ask'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId } = req.params;
+      const { query, conversationId, snapshotSelector = {}, retrievalPolicy = {} } = req.body;
+
+      const RepositoryAIService = require('../services/repository/RepositoryAIService');
+      const response = await RepositoryAIService.askRepository({
+        tenantId,
+        repositoryId,
+        conversationId,
+        query,
+        snapshotSelector,
+        retrievalPolicy
+      });
+
+      res.json(response);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Symbol Explanation API
+ */
+router.post(
+  '/:repositoryId/ai/explain-symbol',
+  protect,
+  checkCapability('repository-ai:explain-symbol'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId } = req.params;
+      const { symbolId, conversationId, snapshotSelector = {} } = req.body;
+
+      const RepositoryAIService = require('../services/repository/RepositoryAIService');
+      const response = await RepositoryAIService.explainSymbol({
+        tenantId,
+        repositoryId,
+        symbolId,
+        conversationId,
+        snapshotSelector
+      });
+
+      res.json(response);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * File Explanation API
+ */
+router.post(
+  '/:repositoryId/ai/explain-file',
+  protect,
+  checkCapability('repository-ai:explain-file'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId } = req.params;
+      const { filePath, conversationId, snapshotSelector = {} } = req.body;
+
+      const RepositoryAIService = require('../services/repository/RepositoryAIService');
+      const response = await RepositoryAIService.explainFile({
+        tenantId,
+        repositoryId,
+        filePath,
+        conversationId,
+        snapshotSelector
+      });
+
+      res.json(response);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Architecture Analysis API
+ */
+router.post(
+  '/:repositoryId/ai/architecture',
+  protect,
+  checkCapability('repository-ai:architecture'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId } = req.params;
+      const { query, conversationId, snapshotSelector = {} } = req.body;
+
+      const RepositoryAIService = require('../services/repository/RepositoryAIService');
+      const response = await RepositoryAIService.answerArchitectureQuestion({
+        tenantId,
+        repositoryId,
+        conversationId,
+        query,
+        snapshotSelector
+      });
+
+      res.json(response);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Structural Dependency Q&A API
+ */
+router.post(
+  '/:repositoryId/ai/dependencies',
+  protect,
+  checkCapability('repository-ai:dependencies'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId } = req.params;
+      const { query, conversationId, snapshotSelector = {} } = req.body;
+
+      const RepositoryAIService = require('../services/repository/RepositoryAIService');
+      const response = await RepositoryAIService.answerDependencyQuestion({
+        tenantId,
+        repositoryId,
+        conversationId,
+        query,
+        snapshotSelector
+      });
+
+      res.json(response);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * Change Impact Q&A API
+ */
+router.post(
+  '/:repositoryId/ai/change-impact',
+  protect,
+  checkCapability('repository-ai:change-impact'),
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.user._id);
+      const { repositoryId } = req.params;
+      const { query, conversationId, snapshotSelector = {} } = req.body;
+
+      const RepositoryAIService = require('../services/repository/RepositoryAIService');
+      const response = await RepositoryAIService.answerChangeImpactQuestion({
+        tenantId,
+        repositoryId,
+        conversationId,
+        query,
+        snapshotSelector
+      });
+
+      res.json(response);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 module.exports = router;

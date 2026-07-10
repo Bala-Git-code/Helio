@@ -254,6 +254,49 @@ class GeminiProviderAdapter extends AiProviderAdapter {
   // --- LOCAL TEST SIMULATORS ---
   _simulateGenerate(request) {
     const textLower = JSON.stringify(request.messages).toLowerCase();
+
+    // Grounded Structured Output simulation
+    if (request.structuredOutput && request.structuredOutput.schema && request.structuredOutput.schema.properties && request.structuredOutput.schema.properties.answer) {
+      let provId = 'prov_test';
+      let promptText = '';
+      if (request.messages && request.messages[0] && request.messages[0].parts && request.messages[0].parts[0]) {
+        promptText = request.messages[0].parts[0].text || '';
+      }
+      const promptMatch = promptText.match(/provenance_id="([^"]+)"/);
+      if (promptMatch) {
+        provId = promptMatch[1];
+      }
+
+      return {
+        text: JSON.stringify({
+          answer: "The Calculator class contains an addValues method which adds two inputs.",
+          claims: [
+            {
+              claimId: "c1",
+              text: "The Calculator class contains an addValues method.",
+              claimType: "REPOSITORY_FACT",
+              citationIds: ["cit1"],
+              confidence: "HIGH",
+              supportStatus: "SUPPORTED"
+            }
+          ],
+          citations: [
+            {
+              citationId: "cit1",
+              provenanceId: provId,
+              claimIds: ["c1"]
+            }
+          ],
+          uncertainties: [],
+          insufficientEvidence: false,
+          conflictingEvidence: false,
+          followUpSuggestions: []
+        }),
+        toolCalls: [],
+        usage: { inputTokens: 200, outputTokens: 300, totalTokens: 500 },
+        providerRequestId: `sim-grounded-${Date.now()}`
+      };
+    }
     
     // OCR Simulation
     if (request.taskType === 'PRESCRIPTION_OCR' || textLower.includes('prescription')) {

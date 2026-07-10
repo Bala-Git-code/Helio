@@ -555,7 +555,9 @@ class RepositoryRetrievalService {
           });
 
           if (includeProvenance) {
-            provenanceManifest.push(this._buildProvenanceEntry(tenantId, doc, excerptLines.length));
+            const prov = this._buildProvenanceEntry(tenantId, doc, excerptLines.length);
+            selectedItems[selectedItems.length - 1].provenanceId = prov.provenanceId;
+            provenanceManifest.push(prov);
           }
 
           currentTokens += truncatedTokens;
@@ -576,7 +578,9 @@ class RepositoryRetrievalService {
       });
 
       if (includeProvenance) {
-        provenanceManifest.push(this._buildProvenanceEntry(tenantId, doc));
+        const prov = this._buildProvenanceEntry(tenantId, doc);
+        selectedItems[selectedItems.length - 1].provenanceId = prov.provenanceId;
+        provenanceManifest.push(prov);
       }
 
       currentTokens += itemTokens;

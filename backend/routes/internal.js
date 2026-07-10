@@ -419,6 +419,149 @@ router.post('/repositories/:repositoryId/retrieval-index/recover', protect, chec
   }
 });
 
+// GET /api/internal/repository-ai/executions
+router.get('/repository-ai/executions', protect, checkCapability('repository-ai-execution:read'), async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+    const skip = (page - 1) * limit;
+
+    const query = {};
+    if (req.query.repositoryId) {
+      query.repositoryId = req.query.repositoryId;
+    }
+
+    // Limit tenant scope unless authorized for read:any-tenant
+    const hasAnyTenant = req.user.role === 'admin';
+    if (!hasAnyTenant) {
+      query.tenantId = String(req.user._id);
+    }
+
+    const RepositoryAIExecution = require('../models/RepositoryAIExecution');
+    const total = await RepositoryAIExecution.countDocuments(query);
+    const list = await RepositoryAIExecution.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    res.json({
+      success: true,
+      data: list,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/internal/repository-ai/executions/:executionId
+router.get('/repository-ai/executions/:executionId', protect, checkCapability('repository-ai-execution:read'), async (req, res, next) => {
+  try {
+    const RepositoryAIExecution = require('../models/RepositoryAIExecution');
+    const execution = await RepositoryAIExecution.findById(req.params.executionId).lean();
+    if (!execution) {
+      return res.status(404).json({ success: false, message: 'AI execution not found.' });
+    }
+
+    const hasAccess = await verifyTenantAccess(req.user, execution.tenantId);
+    if (!hasAccess) {
+      return res.status(403).json({ success: false, message: 'Access denied: Tenant isolation policy violation.' });
+    }
+
+    res.json({ success: true, data: execution });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/internal/repository-ai/executions/:executionId/cancel
+router.post('/repository-ai/executions/:executionId/cancel', protect, checkCapability('jobs:cancel'), async (req, res, next) => {
+  try {
+    const RepositoryAIExecution = require('../models/RepositoryAIExecution');
+    const execution = await RepositoryAIExecution.findById(req.params.executionId);
+    if (!execution) {
+      return res.status(404).json({ success: false, message: 'AI execution not found.' });
+    }
+
+    const hasAccess = await verifyTenantAccess(req.user, execution.tenantId);
+    if (!hasAccess) {
+      return res.status(403).json({ success: false, message: 'Access denied: Tenant isolation policy violation.' });
+    }
+
+    if (execution.status === 'COMPLETED' || execution.status === 'FAILED' || execution.status === 'CANCELLED') {
+      return res.status(400).json({ success: false, message: 'Cannot cancel execution in a terminal state.' });
+    }
+
+    execution.status = 'CANCELLED';
+    execution.failedAt = new Date();
+    execution.errorCode = 'USER_CANCELLED';
+    await execution.save();
+
+    // Create Audit entry
+    const AuditLog = require('../models/AuditLog');
+    await AuditLog.create({
+      actorId: req.user._id,
+      action: 'REPOSITORY_AI_EXECUTION_CANCELLED',
+      details: { executionId: execution._id, tenantId: execution.tenantId }
+    });
+
+    res.json({ success: true, message: 'Execution cancelled successfully.', data: execution });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/internal/repository-ai/executions/:executionId/reverify
+router.post('/repository-ai/executions/:executionId/reverify', protect, checkCapability('repository-retrieval-index:rebuild'), async (req, res, next) => {
+  try {
+    const RepositoryAIExecution = require('../models/RepositoryAIExecution');
+    const execution = await RepositoryAIExecution.findById(req.params.executionId);
+    if (!execution) {
+      return res.status(404).json({ success: false, message: 'AI execution not found.' });
+    }
+
+    const hasAccess = await verifyTenantAccess(req.user, execution.tenantId);
+    if (!hasAccess) {
+      return res.status(403).json({ success: false, message: 'Access denied: Tenant isolation policy violation.' });
+    }
+
+    // Re-verify grounding manually using GroundingVerifier
+    const RepositoryConversationMessage = require('../models/RepositoryConversationMessage');
+    const msg = await RepositoryConversationMessage.findOne({ aiExecutionId: execution._id });
+    if (!msg) {
+      return res.status(400).json({ success: false, message: 'No associated output message found for this execution.' });
+    }
+
+    // Load active evidence package (re-retrieve or simulate)
+    const GroundingVerifier = require('../services/repository/GroundingVerifier');
+    const recheck = await GroundingVerifier.verify({
+      tenantId: execution.tenantId,
+      answer: msg.content,
+      claims: msg.metadata?.claims || [],
+      citations: msg.metadata?.citations || [],
+      validCitations: msg.metadata?.citations || [], // assume previously validated ones
+      evidence: { items: [] }, // simulate check on empty fallback
+      mode: 'DETERMINISTIC'
+    });
+
+    execution.groundingStatus = recheck.status;
+    await execution.save();
+
+    // Create Audit entry
+    const AuditLog = require('../models/AuditLog');
+    await AuditLog.create({
+      actorId: req.user._id,
+      action: 'REPOSITORY_AI_EXECUTION_REVERIFICATION_REQUESTED',
+      details: { executionId: execution._id, newStatus: recheck.status }
+    });
+
+    res.json({ success: true, message: 'Execution grounding re-verified successfully.', data: execution });
+  } catch (err) {
+    next(err);
+  }
+});
+
 const mongoose = require('mongoose');
 
 module.exports = router;

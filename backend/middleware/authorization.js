@@ -28,7 +28,19 @@ const roleCapabilities = {
     'repository-similar-code:execute',
     'repository-retrieval-index:read',
     'repository-retrieval-index:rebuild',
-    'repository-retrieval-index:read:any-tenant'
+    'repository-retrieval-index:read:any-tenant',
+    'repository-ai:ask',
+    'repository-ai:explain-symbol',
+    'repository-ai:explain-file',
+    'repository-ai:architecture',
+    'repository-ai:dependencies',
+    'repository-ai:change-impact',
+    'repository-conversation:create',
+    'repository-conversation:read',
+    'repository-conversation:write',
+    'repository-conversation:archive',
+    'repository-ai-execution:read',
+    'repository-ai-execution:read:any-tenant'
   ],
   doctor: [
     'jobs:read',
@@ -46,7 +58,18 @@ const roleCapabilities = {
     'repository-search:execute',
     'repository-context:retrieve',
     'repository-similar-code:execute',
-    'repository-retrieval-index:read'
+    'repository-retrieval-index:read',
+    'repository-ai:ask',
+    'repository-ai:explain-symbol',
+    'repository-ai:explain-file',
+    'repository-ai:architecture',
+    'repository-ai:dependencies',
+    'repository-ai:change-impact',
+    'repository-conversation:create',
+    'repository-conversation:read',
+    'repository-conversation:write',
+    'repository-conversation:archive',
+    'repository-ai-execution:read'
   ],
   patient: [
     'ai:execute',
@@ -54,7 +77,11 @@ const roleCapabilities = {
     'ai:usage:read',
     'repository-search:execute',
     'repository-context:retrieve',
-    'repository-similar-code:execute'
+    'repository-similar-code:execute',
+    'repository-ai:ask',
+    'repository-conversation:create',
+    'repository-conversation:read',
+    'repository-conversation:write'
   ]
 };
 

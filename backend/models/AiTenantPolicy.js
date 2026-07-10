@@ -23,7 +23,7 @@ const AiTenantPolicySchema = new Schema(
     },
     allowedTaskTypes: {
       type: [String],
-      default: ['CLINICAL_SUMMARY', 'DRUG_INTERACTION', 'CHAT_ASSISTANCE', 'PRESCRIPTION_OCR', 'EMBEDDINGS']
+      default: ['CLINICAL_SUMMARY', 'DRUG_INTERACTION', 'CHAT_ASSISTANCE', 'PRESCRIPTION_OCR', 'EMBEDDINGS', 'REPOSITORY_QA']
     },
     monthlyBudget: {
       type: Number,
