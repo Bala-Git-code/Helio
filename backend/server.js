@@ -17,6 +17,8 @@ import doctorRoutes from './routes/doctor.js';
 import aiRoutes from './routes/ai.js';
 import webhookRoutes from './routes/webhooks.js';
 
+import { autoSeedDatabase } from './utils/autoSeed.js';
+
 dotenv.config();
 
 const app = express();
@@ -24,7 +26,11 @@ const PORT = process.env.PORT || 5000;
 
 // Security Middlewares & Sanitization
 app.use(helmet());
-app.use(mongoSanitize({ replaceWith: '_' }));
+app.use((req, res, next) => {
+  if (req.body) mongoSanitize.sanitize(req.body, { replaceWith: '_' });
+  if (req.params) mongoSanitize.sanitize(req.params, { replaceWith: '_' });
+  next();
+});
 
 // Skip rate limiting during automated Jest integration tests
 const skipInTest = () => process.env.NODE_ENV === 'test';
@@ -57,6 +63,8 @@ const aiLimiter = rateLimit({
 });
 
 app.use('/api', generalLimiter);
+// Strict rate limiting on credential-based endpoints only
+// demo-login intentionally uses only the general limiter — it is fail-safe by design
 app.use('/api/v1/auth/login', authLimiter);
 app.use('/api/v1/auth/register', authLimiter);
 app.use('/api/v1/ai', aiLimiter);
@@ -127,6 +135,8 @@ export const startServer = async () => {
     }
 
     console.log('[MongoDB] Connected successfully with maxPoolSize: 50.');
+
+    await autoSeedDatabase();
 
     startOutboxPublisher(5000);
     startQueueWorker(3000);

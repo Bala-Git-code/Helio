@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import { jest, describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import request from 'supertest';
 import mongoose from 'mongoose';
@@ -27,8 +29,9 @@ describe('HELIO Backend Architecture & Integration Test Suite', () => {
     if (mongoose.connection.readyState !== 0) {
       await mongoose.disconnect();
     }
-    await mongoose.connect('mongodb://127.0.0.1:27017/helio', {
-      serverSelectionTimeoutMS: 3000,
+    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/helio';
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 10000,
     });
   });
 
@@ -48,7 +51,7 @@ describe('HELIO Backend Architecture & Integration Test Suite', () => {
           phone: '+15550001111',
         });
 
-      if (res.statusCode !== 201) console.error('Register Patient Error Body:', res.body);
+      if (res.statusCode !== 201) console.error('Register Patient Error Body:', res.status, res.body);
 
       expect(res.statusCode).toBe(201);
       expect(res.body.success).toBe(true);
@@ -91,6 +94,7 @@ describe('HELIO Backend Architecture & Integration Test Suite', () => {
         .get('/api/v1/doctor/patients')
         .set('Authorization', `Bearer ${patientToken}`);
 
+      if (res.statusCode !== 403) console.error('Block Patient Error:', res.status, res.body);
       expect(res.statusCode).toBe(403);
       expect(res.body.success).toBe(false);
     });
