@@ -1,69 +1,51 @@
-const consentRepository = require('../repositories/consentRepository');
-const PatientProfile = require('../models/PatientProfile');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
-const AuditLog = require('../models/AuditLog');
+import { DoctorPatientLink } from '../models/DoctorPatientLink.js';
 
-class ConsentService {
-  async verifyDoctorAccess(doctorId, patientId) {
-    const isApproved = await consentRepository.checkApproved(patientId, doctorId);
-    
-    // Log audit for every access check
-    await AuditLog.create({
-      actorId: doctorId,
-      action: 'CONSENT_ACCESS_VERIFY',
-      details: { patientId, result: isApproved ? 'GRANTED' : 'DENIED' }
-    });
+export const verifyDoctorConsent = async (doctorId, patientId) => {
+  if (!doctorId || !patientId) return false;
 
-    return isApproved;
+  const link = await DoctorPatientLink.findOne({
+    doctorId,
+    patientId,
+    status: 'ACTIVE',
+  });
+
+  if (!link) return false;
+
+  if (link.expiresAt && new Date() > link.expiresAt) {
+    link.status = 'REVOKED';
+    await link.save();
+    return false;
   }
 
-  async requestClinicalLink(doctorId, accessCode, doctorName) {
-    const profile = await PatientProfile.findOne({ accessCode: accessCode.trim() });
-    if (!profile) {
-      throw new Error('No patient record found matching this access code.');
+  return true;
+};
+
+export const doctorConsentMiddleware = async (req, res, next) => {
+  try {
+    if (req.user?.role !== 'DOCTOR') {
+      return res.status(403).json({ success: false, error: 'Access denied. Doctor privileges required.' });
     }
 
-    const patientUser = await User.findById(profile.userId);
-    if (!patientUser) {
-      throw new Error('Patient account details not found.');
+    const patientId = req.params.patientId || req.body.patientId || req.query.patientId;
+    if (!patientId) {
+      return res.status(400).json({ success: false, error: 'Patient ID is required for verification.' });
     }
 
-    // Save pending permission
-    const permission = await consentRepository.savePermission(profile.userId, doctorId, 'pending');
+    const hasConsent = await verifyDoctorConsent(req.user._id, patientId);
+    if (!hasConsent) {
+      return res.status(403).json({
+        success: false,
+        error: 'Consent-Based Access Security: Active consent link required to view or edit patient medical records.',
+      });
+    }
 
-    // Notify patient
-    await Notification.create({
-      userId: profile.userId,
-      category: 'doctor',
-      title: 'Clinician Access Request',
-      message: `Doctor ${doctorName || 'Clinician'} is requesting clinical timeline permissions. Check the support options tab.`,
-      priority: 'high'
-    });
-
-    await AuditLog.create({
-      actorId: doctorId,
-      action: 'LINK_REQUEST_INIT',
-      details: { patientId: profile.userId }
-    });
-
-    return {
-      permission,
-      patient: { id: profile.userId, name: patientUser.name, accessCode: profile.accessCode }
-    };
+    next();
+  } catch (err) {
+    next(err);
   }
+};
 
-  async revokeAccess(doctorId, patientId) {
-    const permission = await consentRepository.savePermission(patientId, doctorId, 'revoked');
-    
-    await AuditLog.create({
-      actorId: doctorId,
-      action: 'CONSENT_REVOKED',
-      details: { patientId }
-    });
-
-    return permission;
-  }
-}
-
-module.exports = new ConsentService();
+export default {
+  verifyDoctorConsent,
+  doctorConsentMiddleware,
+};

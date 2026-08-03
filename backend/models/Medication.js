@@ -1,69 +1,85 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
-const MedicationSchema = new mongoose.Schema(
-  {
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-      index: true,
-    },
-    name: { type: String, required: true },
-    genericName: { type: String, default: '' },
-    form: { type: String, default: 'tablet' },
-    dosage: String,
-    purpose: { type: String, default: '' },
-    frequency: String,
-    times: [String],
-    startDate: Date,
-    endDate: Date,
-    ingredients: String,
-    foodInstruction: { type: String, default: 'none' },
-    specialInstructions: { type: String, default: '' },
-    notes: String,
-    active: { type: Boolean, default: true },
-    quantity: { type: Number, default: 30 },
-    refillThreshold: { type: Number, default: 5 },
-    refillReminderEnabled: { type: Boolean, default: true },
-    prescribingDoctor: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    sourcePrescription: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Consultation'
-    },
-    reminderPreferences: {
-      channels: { type: [String], default: ['app'] },
-      leadTimeMinutes: { type: Number, default: 0 },
-      quietHoursStart: { type: String, default: '' },
-      quietHoursEnd: { type: String, default: '' },
-      followUpTimingMinutes: { type: Number, default: 15 },
-      maxFollowUpAttempts: { type: Number, default: 3 }
-    },
-    scheduleVersion: { type: Number, default: 1 },
-    scheduleHistory: [
-      {
-        version: Number,
-        frequency: String,
-        times: [String],
-        changedAt: { type: Date, default: Date.now }
-      }
-    ],
-    snoozedUntil: Date,
-    snoozeDuration: Number,
-    adherenceLogs: [
-      {
-        takenAt: { type: Date, default: Date.now },
-        timeSlot: String
-      }
-    ],
-    adherence: {
-      taken: { type: Number, default: 0 },
-      target: { type: Number, default: 1 },
-    },
+const medicationSchema = new mongoose.Schema({
+  patientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
   },
-  { timestamps: true }
-);
+  doctorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  dosage: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  frequency: {
+    type: String,
+    enum: ['ONCE_DAILY', 'TWICE_DAILY', 'THREE_TIMES_DAILY', 'EVERY_OTHER_DAY', 'AS_NEEDED'],
+    default: 'ONCE_DAILY',
+  },
+  timesPerDay: {
+    type: Number,
+    default: 1,
+  },
+  dailyTimings: [{
+    type: String,
+  }],
+  scheduleTimes: [{
+    type: String,
+  }],
+  totalQuantity: {
+    type: Number,
+    required: true,
+    default: 30,
+  },
+  remainingQuantity: {
+    type: Number,
+    required: true,
+    default: 30,
+  },
+  pillCount: {
+    type: Number,
+    default: 30,
+  },
+  refillThreshold: {
+    type: Number,
+    default: 7,
+  },
+  startDate: {
+    type: Date,
+    default: Date.now,
+  },
+  endDate: {
+    type: Date,
+  },
+  instructions: {
+    type: String,
+    default: '',
+  },
+  status: {
+    type: String,
+    enum: ['ACTIVE', 'DISCONTINUED', 'COMPLETED'],
+    default: 'ACTIVE',
+  },
+  prescribedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+}, {
+  timestamps: true,
+});
 
-module.exports = mongoose.model('Medication', MedicationSchema);
+// High-frequency query compound index
+medicationSchema.index({ patientId: 1, status: 1 });
+
+export const Medication = mongoose.model('Medication', medicationSchema);
+export default Medication;

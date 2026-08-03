@@ -1,34 +1,43 @@
 {
-  "name": "backend",
+  "name": "helio-backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "HELIO Enterprise Medication Intelligence Platform - Backend API",
+  "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "seed": "node seed.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --detectOpenHandles --forceExit"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "healthcare",
+    "medication",
+    "ai",
+    "express"
+  ],
+  "author": "HELIO Team",
+  "license": "MIT",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "bcrypt": "^6.0.0",
+    "axios": "^1.7.9",
     "bcryptjs": "^3.0.2",
-    "compression": "^1.8.1",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.2",
+    "dotenv": "^16.4.7",
     "express": "^5.1.0",
     "express-mongo-sanitize": "^2.2.0",
-    "express-rate-limit": "^8.5.2",
-    "helmet": "^8.2.0",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
-    "mongodb": "^6.19.0",
     "mongoose": "^8.18.2",
+    "multer": "^1.4.5-lts.1",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
-  },
-  "description": ""
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.10",
+    "supertest": "^7.0.0"
+  }
 }

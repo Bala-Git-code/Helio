@@ -1,206 +1,100 @@
 import React, { useState, useEffect } from 'react';
-import { jwtDecode } from "jwt-decode";
-import WelcomePage from './components/WelcomePage';
+import Navbar from './components/Navbar';
+import PatientPortal from './components/PatientPortal';
+import DoctorPortal from './components/DoctorPortal';
 import AuthPage from './components/AuthPage';
-import BasicInfoPage from './components/BasicInfoPage';
-import Dashboard from './components/Dashboard';
-import DoctorDashboard from './components/DoctorDashboard';
-import AdminDashboard from './components/AdminDashboard';
-import OnboardingTour from './components/OnboardingTour';
 
-function App() {
-  const [currentPage, setCurrentPage] = useState('welcome');
-  const [user, setUser] = useState(null);
-  const [medicines, setMedicines] = useState([]);
-  const [appointments, setAppointments] = useState([]);
-  const [appointmentSummaries, setAppointmentSummaries] = useState([]);
-  
-  // App Notifications & Tours
-  const [showLoginNotification, setShowLoginNotification] = useState(false);
-  const [showTour, setShowTour] = useState(false);
-  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+export function App() {
+  const [theme, setTheme] = useState(localStorage.getItem('helio_theme') || 'light');
+  const [token, setToken] = useState(localStorage.getItem('helio_token') || '');
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('helio_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [activePortal, setActivePortal] = useState('patient');
 
-  useEffect(() => {
-    const handlePopState = () => {
-      setCurrentPath(window.location.pathname);
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  // 1. Session Restore on Application Mount
-  useEffect(() => {
-    const storedToken = localStorage.getItem('jwtToken');
-    if (storedToken) {
-      try {
-        const decodedToken = jwtDecode(storedToken);
-        const isExpired = decodedToken.exp * 1000 < Date.now();
-        
-        if (!isExpired) {
-          const userData = {
-            id: decodedToken.user.id,
-            role: decodedToken.user.role,
-            name: decodedToken.user.name || 'User',
-            email: decodedToken.user.email || 'No email',
-            userType: decodedToken.user.role
-          };
-          
-          setUser(userData);
-          
-          // Route based on role
-          if (userData.userType === 'doctor') {
-            setCurrentPage('doctorDashboard');
-          } else if (userData.userType === 'admin') {
-            setCurrentPage('adminDashboard');
-          } else {
-            setCurrentPage('dashboard');
-          }
-        } else {
-          localStorage.removeItem('jwtToken');
-        }
-      } catch (err) {
-        localStorage.removeItem('jwtToken');
-      }
-    }
-  }, []);
-
-  // 2. Google OAuth Redirect Handler
+  // Handle URL token from Google OAuth Redirect
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-
-    if (token) {
-      localStorage.setItem('jwtToken', token);
-      
-      const decodedToken = jwtDecode(token);
-      const userData = {
-        id: decodedToken.user.id,
-        role: decodedToken.user.role,
-        name: decodedToken.user.name || 'New User', 
-        email: decodedToken.user.email || 'No email',
-        userType: decodedToken.user.role
-      };
-
-      handleAuthSuccess(userData, false, true);
-      window.history.replaceState(null, '', window.location.pathname);
+    const urlToken = urlParams.get('token');
+    if (urlToken) {
+      setToken(urlToken);
+      localStorage.setItem('helio_token', urlToken);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      fetchUserProfile(urlToken);
     }
   }, []);
 
-  const handleGetStarted = () => {
-    setCurrentPage('auth');
-  };
+  // Sync Theme attribute
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('helio_theme', theme);
+  }, [theme]);
 
-  const handleGoHome = () => {
-    setCurrentPage('welcome');
-  };
-
-  const handleAuthSuccess = (userData, isNewUser, showNotification = false) => {
-    setUser(userData);
-    setShowLoginNotification(showNotification);
-
-    if (userData.userType === 'doctor') {
-      setCurrentPage('doctorDashboard');
-    } else if (userData.userType === 'admin') {
-      setCurrentPage('adminDashboard');
+  // Set default view based on user role when logging in
+  useEffect(() => {
+    if (user?.role === 'DOCTOR') {
+      setActivePortal('doctor');
     } else {
-      if (isNewUser) {
-        setCurrentPage('basicInfo');
+      setActivePortal('patient');
+    }
+  }, [user]);
+
+  const fetchUserProfile = async (authToken) => {
+    try {
+      const res = await fetch('/api/v1/auth/me', {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUser(data.user);
+        localStorage.setItem('helio_user', JSON.stringify(data.user));
       } else {
-        setCurrentPage('dashboard');
+        handleLogout();
       }
+    } catch (err) {
+      console.error('Failed to fetch user profile:', err);
     }
   };
 
-  const handleBasicInfoComplete = (basicInfo) => {
-    if (user) {
-      setUser({ ...user, ...basicInfo });
-      setCurrentPage('dashboard');
-      setShowTour(true); // Launch guided tour on onboarding complete
-    }
-  };
-
-  const handleAddMedicine = (medicine) => {
-    setMedicines(prev => [...prev, medicine]);
-  };
-
-  const handleDeleteMedicine = (id) => {
-    setMedicines(prev => prev.filter(med => med.id !== id));
-  };
-
-  const handleAddAppointment = (appointment) => {
-    setAppointments(prev => [...prev, appointment]);
-  };
-
-  const handleDeleteAppointment = (id) => {
-    setAppointments(prev => prev.filter(apt => apt.id !== id));
-  };
-
-  const handleSaveAppointmentSummary = (summary) => {
-    setAppointmentSummaries(prev => [...prev, summary]);
+  const handleAuthSuccess = (newToken, newUser) => {
+    setToken(newToken);
+    setUser(newUser);
+    localStorage.setItem('helio_token', newToken);
+    localStorage.setItem('helio_user', JSON.stringify(newUser));
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('jwtToken');
+    setToken('');
     setUser(null);
-    setCurrentPage('welcome');
-    setMedicines([]);
-    setAppointments([]);
-    setAppointmentSummaries([]);
-    setShowTour(false);
-  };
-
-  const handleUpdateUser = (updatedUser) => {
-    setUser(updatedUser);
-  };
-  
-  const handleNotificationDismiss = () => {
-      setShowLoginNotification(false);
+    localStorage.removeItem('helio_token');
+    localStorage.removeItem('helio_user');
   };
 
   return (
-    <div className="page-shell">
-      {currentPage === 'welcome' && <WelcomePage onGetStarted={handleGetStarted} />}
-      {currentPage === 'auth' && <AuthPage onAuthSuccess={handleAuthSuccess} />}
-      {currentPage === 'basicInfo' && <BasicInfoPage onComplete={handleBasicInfoComplete} />}
-      
-      {currentPage === 'doctorDashboard' && user && (
-        <DoctorDashboard 
-          user={user}
-          onLogout={handleLogout}
-          currentPath={currentPath}
-          onNavigate={setCurrentPath}
-        />
-      )}
-      
-      {currentPage === 'adminDashboard' && user && (
-        <AdminDashboard 
-          user={user}
-          onLogout={handleLogout}
-        />
-      )}
-      
-      {currentPage === 'dashboard' && user && (
-        <Dashboard 
-          user={user} 
-          onUpdateUser={handleUpdateUser}
-          medicines={medicines}
-          appointments={appointments}
-          appointmentSummaries={appointmentSummaries}
-          onAddMedicine={handleAddMedicine}
-          onDeleteMedicine={handleDeleteMedicine}
-          onAddAppointment={handleAddAppointment}
-          onDeleteAppointment={handleDeleteAppointment}
-          onSaveAppointmentSummary={handleSaveAppointmentSummary}
-          onGoHome={handleGoHome}
-          showSuccessNotification={showLoginNotification}
-          onNotificationDismiss={handleNotificationDismiss}
-          currentPath={currentPath}
-          onNavigate={setCurrentPath}
-        />
-      )}
+    <div className="app-container">
+      <Navbar
+        user={user}
+        activePortal={activePortal}
+        setActivePortal={setActivePortal}
+        theme={theme}
+        setTheme={setTheme}
+        onLogout={handleLogout}
+      />
 
-      {/* Guide tour overlay */}
-      {showTour && <OnboardingTour onClose={() => setShowTour(false)} />}
+      <main className="main-content">
+        {!token || !user ? (
+          <AuthPage onAuthSuccess={handleAuthSuccess} />
+        ) : activePortal === 'doctor' ? (
+          <DoctorPortal token={token} user={user} />
+        ) : (
+          <PatientPortal token={token} user={user} />
+        )}
+      </main>
+
+      <footer style={{ borderTop: '1px solid var(--border-color)', padding: '1.5rem', textAlign: 'center', fontSize: '0.825rem', color: 'var(--text-muted)' }}>
+        HELIO Enterprise Medication Intelligence Platform • React 18, Express 5 & MongoDB Atlas • Clinical Intelligence AI
+      </footer>
     </div>
   );
 }

@@ -1,134 +1,165 @@
-require('dotenv').config();
-const compression = require('compression');
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import helmet from 'helmet';
+import mongoSanitize from 'express-mongo-sanitize';
+import rateLimit from 'express-rate-limit';
+import dotenv from 'dotenv';
+import passport from 'passport';
 
-// 1. Fail-Fast Configuration check
-const { validateEnv } = require('./config/envValidator');
-validateEnv();
+import { configurePassport } from './config/passport.js';
+import { startOutboxPublisher, stopOutboxPublisher } from './services/outboxPublisher.js';
+import { startQueueWorker, stopQueueWorker } from './services/queueWorker.js';
 
-const express = require('express');
-const passport = require('passport');
-const cors = require('cors');
-const helmet = require('helmet');
-const path = require('path');
-const mongoose = require('mongoose');
+import authRoutes from './routes/auth.js';
+import patientRoutes from './routes/patient.js';
+import doctorRoutes from './routes/doctor.js';
+import aiRoutes from './routes/ai.js';
+import webhookRoutes from './routes/webhooks.js';
 
-const connectDB = require('./config/db');
-const { apiLimiter, sanitizeQuery } = require('./middleware/security');
-const errorHandler = require('./middleware/errorHandler');
-const { verifyStartupHealth } = require('./config/startupHealthCheck');
-const worker = require('./worker');
+dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 
-// Register webhooks router before general JSON body parsing middleware
-app.use('/api/webhooks', require('./routes/webhooks'));
+// Security Middlewares & Sanitization
+app.use(helmet());
+app.use(mongoSanitize({ replaceWith: '_' }));
 
-// Trust the first reverse proxy (Nginx) for correct client IP in rate limiting
-app.set('trust proxy', 1);
+// Skip rate limiting during automated Jest integration tests
+const skipInTest = () => process.env.NODE_ENV === 'test';
 
-// Secure headers
-app.use(helmet({
-  contentSecurityPolicy: false // Allow inline scripts for simpler React bundler mounts
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  skip: skipInTest,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'General API rate limit exceeded. Please try again later.' },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skip: skipInTest,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many authentication attempts. Please try again in 15 minutes.' },
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  skip: skipInTest,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'AI processing quota limit reached for this hour.' },
+});
+
+app.use('/api', generalLimiter);
+app.use('/api/v1/auth/login', authLimiter);
+app.use('/api/v1/auth/register', authLimiter);
+app.use('/api/v1/ai', aiLimiter);
+
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  credentials: true,
 }));
 
-// Gzip compression for API responses and static assets
-app.use(compression());
-
-// CORS rules — scoped to CLIENT_URL environment variable
-const allowedOrigin = process.env.CLIENT_URL || 'http://localhost:5173';
-app.use(cors({ origin: allowedOrigin, credentials: true }));
-
-// Express JSON limit sizes
 app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// NoSQL injection guards
-app.use(sanitizeQuery);
-
-// General API request limits
-app.use('/api', apiLimiter);
-
-// Passport Auth configs
+// Passport Configuration
+configurePassport();
 app.use(passport.initialize());
-require('./config/passport')(passport);
 
-// Endpoints definitions
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/patients', require('./routes/patients'));
-app.use('/api/doctor', require('./routes/doctors'));
-app.use('/api/doctors', require('./routes/doctors'));
-app.use('/api/documents', require('./routes/documents'));
-app.use('/api/health', require('./routes/health'));
-app.use('/api/internal', require('./routes/internal'));
-app.use('/api/internal/ai', require('./routes/aiInternal'));
-app.use('/api/repositories', require('./routes/repositories'));
+// API Route Modules
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/patient', patientRoutes);
+app.use('/api/v1/doctor', doctorRoutes);
+app.use('/api/v1/ai', aiRoutes);
+app.use('/api/v1/webhooks', webhookRoutes);
 
-app.get('/api/health-check', (_req, res) => {
-  res.json({ status: 'ok', service: 'helio-backend' });
+// Health Check Endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'UP',
+    platform: 'HELIO Enterprise Medication Intelligence Platform',
+    timestamp: new Date(),
+    mongoState: mongoose.connection.readyState === 1 ? 'CONNECTED' : 'DISCONNECTED',
+  });
 });
 
-// React bundle serves
-app.use(express.static(path.join(__dirname, 'dist')));
-app.use((req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+// Centralized Error Handling Middleware
+app.use((err, req, res, next) => {
+  console.error('[HELIO Server Error]', err);
+  const statusCode = err.statusCode || err.status || 500;
+  res.status(statusCode).json({
+    success: false,
+    error: err.message || 'Internal Server Error',
+  });
 });
 
-// Centralized error handler
-app.use(errorHandler);
+let server = null;
 
-// Initialize background document queue listeners
-require('./services/documentProcessingQueue');
-
-const processType = process.env.PROCESS_TYPE || 'all';
-
-async function startServer() {
+export const startServer = async () => {
   try {
-    // 2. Establish database connection (with timeout and retry options)
-    await connectDB();
+    // Start listening on HTTP port immediately
+    server = app.listen(PORT, () => {
+      console.log(`[HELIO Platform Engine] Server listening on port ${PORT}`);
+    });
 
-    // 3. Service health check verification
-    await verifyStartupHealth();
+    let mongoUri = process.env.LOCAL_MONGO_ONLY === 'true' ? 'mongodb://127.0.0.1:27017/helio' : (process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/helio');
+    console.log('[MongoDB] Connecting to database...');
 
-    // 4. Start HTTP Server
-    if (processType === 'all' || processType === 'api') {
-      const PORT = process.env.PORT || 5000;
-      const server = app.listen(PORT, () => console.log(`🚀 HELIO Server running on port ${PORT}`));
+    const mongoOpts = {
+      maxPoolSize: 50,
+      serverSelectionTimeoutMS: 3000,
+      socketTimeoutMS: 45000,
+    };
 
-      // Graceful shutdown hooks for Express
-      const shutdownServer = async (signal) => {
-        console.log(`\n[Server] Received signal ${signal}. Closing HTTP listener...`);
-        server.close(async () => {
-          console.log('[Server] HTTP listener closed.');
-          if (processType === 'all') {
-            const OutboxService = require('./services/medication/OutboxService');
-            const QueueService = require('./services/medication/QueueService');
-            OutboxService.stop();
-            try {
-              await QueueService.stop(5000);
-              await mongoose.connection.close();
-              console.log('[Server] MongoDB connection closed cleanly. Exit.');
-              process.exit(0);
-            } catch (err) {
-              console.error('[Server] Graceful exit failure:', err.message);
-              process.exit(1);
-            }
-          } else {
-            process.exit(0);
-          }
-        });
-      };
-
-      process.on('SIGTERM', () => shutdownServer('SIGTERM'));
-      process.on('SIGINT', () => shutdownServer('SIGINT'));
+    try {
+      await mongoose.connect(mongoUri, mongoOpts);
+    } catch (primaryErr) {
+      console.warn('[MongoDB] Primary MONGO_URI failed, attempting local MongoDB fallback...');
+      mongoUri = 'mongodb://127.0.0.1:27017/helio';
+      await mongoose.connect(mongoUri, mongoOpts);
     }
 
-    // 5. Bootstrap workers dynamically
-    await worker.bootstrap();
+    console.log('[MongoDB] Connected successfully with maxPoolSize: 50.');
 
+    startOutboxPublisher(5000);
+    startQueueWorker(3000);
   } catch (err) {
-    console.error('\n❌ CRITICAL: Platform startup failed during initialization:');
-    console.error(`Reason: ${err.message}\n`);
-    process.exit(1);
+    console.error('[MongoDB Connection Error]', err.message);
   }
+};
+
+// Launch automatically if not running in Jest test runner
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
 }
 
-startServer();
+// Graceful Shutdown Handlers (SIGTERM / SIGINT)
+const gracefulShutdown = (signal) => {
+  console.log(`\n[HELIO Engine] ${signal} received. Initiating graceful shutdown...`);
+
+  stopOutboxPublisher();
+  stopQueueWorker();
+
+  if (server) {
+    server.close(async () => {
+      console.log('[HELIO Engine] HTTP server closed.');
+      await mongoose.connection.close();
+      console.log('[MongoDB] Connection closed.');
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+export default app;

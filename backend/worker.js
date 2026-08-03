@@ -85,6 +85,15 @@ JobHandlerRegistry.register({
   }
 });
 
+JobHandlerRegistry.register({
+  jobType: 'execute-workflow-job',
+  execute: async (context, payload) => {
+    const { workflowId } = payload;
+    const WorkflowExecutor = require('./services/repository/WorkflowExecutor');
+    await WorkflowExecutor.executeWorkflowLoop(workflowId);
+  }
+});
+
 
 JobHandlerRegistry.register({
   jobType: 'trigger-rolling-generation',
