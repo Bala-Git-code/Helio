@@ -1,0 +1,103 @@
+# ============================================================================
+# HELIO - Production Git Ignore Configuration
+# ============================================================================
+
+# 1. Dependencies & Package Managers
+node_modules/
+*/node_modules/
+.pnp
+.pnp.js
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# 2. Environment Variables & Sensitive Credentials (CRITICAL)
+.env
+.env.*
+*.env
+backend/.env
+frontend/.env
+!*.env.example
+!*.env.template
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# API Keys, Cloud Certificates & Service Accounts
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+serviceAccountKey.json
+google-services.json
+credentials.json
+client_secret*.json
+*.token
+
+# 3. Production Build & Distribution Artifacts
+dist/
+dist-ssr/
+build/
+out/
+backend/dist/
+frontend/dist/
+*.tsbuildinfo
+
+# 4. Logs, Telemetry & Crash Dumps
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# 5. Testing & Code Coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# 6. Database Dumps & Local Data Storage
+*.sqlite
+*.sqlite3
+*.db
+dump/
+data/
+mongo-dump/
+
+# 7. Operating System Artifacts
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# 8. IDE, Editor & Tooling Workspaces
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.sublime-workspace
+*.sublime-project
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 9. Temporary & Scratch Files
+temp/
+tmp/
+.cache/
+.eslintcache
+.stylelintcache

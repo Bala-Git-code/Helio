@@ -1,0 +1,190 @@
+/* ==========================================================================
+   HELIO DESIGN SYSTEM FOUNDATION (UNIFIED COSMIC DARK THEME)
+   Theme: "Hyper-Vitality Specular Void & Bioluminescent Glass"
+   Aesthetic: Premium Medication Intelligence & Futuristic Clinical Fintech
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ------------------------------------------------------------------------
+     1. Master Cosmic Void & Specular Dark Glass Surfaces
+     ------------------------------------------------------------------------ */
+  --canvas-void: #08080F;              /* Deep obsidian base */
+  --canvas-abyss: #0D0E1A;             /* Elevated layer / card canvas */
+  --canvas-card: rgba(255, 255, 255, 0.04); /* Specular frosted card */
+  --canvas-card-hover: rgba(255, 255, 255, 0.07);
+  --canvas-card-solid: #121324;
+  --canvas-subtle: rgba(255, 255, 255, 0.02);
+
+  /* Unified Dark Theme Primary Canvas Tokens */
+  --surface-ground: #08080F;
+  --surface-ground-warm: #0D0E1A;
+  --surface-card: rgba(255, 255, 255, 0.04);
+  --surface-card-subtle: rgba(255, 255, 255, 0.02);
+  --surface-card-hover: rgba(255, 255, 255, 0.07);
+  --surface-border: rgba(255, 255, 255, 0.08);
+  --surface-border-subtle: rgba(255, 255, 255, 0.05);
+
+  /* Frosted Glassmorphism Tokens */
+  --glass-dark: rgba(13, 14, 26, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-specular: rgba(255, 255, 255, 0.04);
+  --glass-blur-sm: blur(8px);
+  --glass-blur-md: blur(16px);
+  --glass-blur-lg: blur(28px);
+
+  /* ------------------------------------------------------------------------
+     2. Anti-Vanilla Vibrant Bioluminescent Color Spectrum
+     ------------------------------------------------------------------------ */
+  /* Vitality Mint & Emerald (Active Doses, Adherence, Life Telemetry) */
+  --vitality-mint: #10B981;
+  --vitality-mint-light: #34D399;
+  --vitality-mint-surface: rgba(16, 185, 129, 0.12);
+  --vitality-mint-border: rgba(16, 185, 129, 0.35);
+  --vitality-glow: rgba(16, 185, 129, 0.4);
+
+  /* Deep Royal Indigo & Ultraviolet (HELIO Neural Engine & AI Triage) */
+  --neural-violet: #8B5CF6;
+  --neural-indigo: #4F46E5;
+  --neural-amethyst: #7C3AED;
+  --neural-surface: rgba(139, 92, 246, 0.12);
+  --neural-border: rgba(139, 92, 246, 0.35);
+  --neural-glow: rgba(139, 92, 246, 0.45);
+
+  /* Solar Coral & Crimson (Drug Interactions & Critical Triage Intercepts) */
+  --solar-coral: #F43F5E;
+  --solar-plasma: #FB7185;
+  --solar-amber: #F59E0B;
+  --solar-surface: rgba(244, 63, 94, 0.12);
+  --solar-border: rgba(244, 63, 94, 0.35);
+  --solar-glow: rgba(244, 63, 94, 0.4);
+
+  /* Cryo Telemetry Cyan (Dosage Metrics, Time Markers, Active Glows) */
+  --cryo-cyan: #06B6D4;
+  --cryo-teal: #0D9488;
+  --cryo-surface: rgba(6, 182, 212, 0.12);
+  --cryo-border: rgba(6, 182, 212, 0.35);
+  --cryo-glow: rgba(6, 182, 212, 0.4);
+
+  /* High-Status Accent */
+  --luminous-gold: #F59E0B;
+
+  /* ------------------------------------------------------------------------
+     3. Signature Gradients (Vibrant Bioluminescent Energy)
+     ------------------------------------------------------------------------ */
+  --grad-aurora: linear-gradient(135deg, #8B5CF6 0%, #4F46E5 50%, #06B6D4 100%);
+  --grad-fintech-glow: linear-gradient(135deg, #06B6D4 0%, #4F46E5 50%, #8B5CF6 100%);
+  --grad-sunset-plasma: linear-gradient(135deg, #F43F5E 0%, #EA580C 50%, #F59E0B 100%);
+  --grad-vitality: linear-gradient(135deg, #10B981 0%, #059669 50%, #06B6D4 100%);
+  --grad-mesh-dark: radial-gradient(at 10% 20%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+                    radial-gradient(at 90% 10%, rgba(6, 182, 212, 0.12) 0px, transparent 50%),
+                    radial-gradient(at 50% 90%, rgba(16, 185, 129, 0.10) 0px, transparent 50%),
+                    #08080F;
+  --grad-glass-border: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.04) 100%);
+
+  /* ------------------------------------------------------------------------
+     4. High-Contrast Typographic Neutrals & Fonts
+     ------------------------------------------------------------------------ */
+  --text-primary: #FFFFFF;          /* Pure crisp white */
+  --text-secondary: #A1A1C0;        /* Refined cool lavender slate */
+  --text-muted: #64647A;            /* Subtle labels, metadata */
+  --text-light-pure: #FFFFFF;
+  --text-light-subtle: #A1A1C0;
+  --text-light-muted: #64647A;
+
+  --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* ------------------------------------------------------------------------
+     5. Multi-Layered Soft Ambient Diffusion Shadows & Glows
+     ------------------------------------------------------------------------ */
+  --shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+  --shadow-bento: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --shadow-bento-elevated: 0 20px 50px -12px rgba(0, 0, 0, 0.6), 0 0 1px 1px rgba(255, 255, 255, 0.08);
+  
+  --shadow-glow-mint: 0 0 30px -5px rgba(16, 185, 129, 0.35);
+  --shadow-glow-violet: 0 0 35px -5px rgba(139, 92, 246, 0.4);
+  --shadow-glow-cyan: 0 0 30px -5px rgba(6, 182, 212, 0.35);
+  --shadow-glow-coral: 0 0 30px -5px rgba(244, 63, 94, 0.35);
+
+  /* ------------------------------------------------------------------------
+     6. Geometry & Transitions
+     ------------------------------------------------------------------------ */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-pill: 9999px;
+
+  --trans-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --trans-smooth: cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* --------------------------------------------------------------------------
+   Global Resets & Typographic Base (Dark Theme)
+   -------------------------------------------------------------------------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  min-height: 100%;
+  font-family: var(--font-body);
+  background-color: var(--surface-ground);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+code, pre, .font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Custom Scrollbars in Bioluminescent Dark */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0D0D1A;
+}
+::-webkit-scrollbar-thumb {
+  background: #6D28D9;
+  border-radius: var(--radius-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #8B5CF6;
+}
+
+/* Utility Animations */
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+@keyframes floatSubtle {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 4s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: floatSubtle 6s ease-in-out infinite;
+}
