@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { DnaModel3D } from "../../components/3d/DnaModel3D";
+import { HelioLogo } from "../../components/common/HelioLogo";
 
 function useWindowWidth() {
   const [w, setW] = useState(typeof window !== "undefined" ? window.innerWidth : 1200);
@@ -129,7 +130,7 @@ export function LandingPage() {
       <nav style={{ position: "sticky", top: 0, zIndex: 50, backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", background: scrolled ? "rgba(8,8,15,0.92)" : "rgba(8,8,15,0.55)", borderBottom: `1px solid ${scrolled ? C.border2 : "transparent"}`, transition: "all 0.3s ease" }}>
         <div style={{ maxWidth: 1400, margin: "0 auto", padding: `14px ${px}px`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
           <button onClick={() => navigate("/")} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, padding: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: C.gradH, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 20px rgba(139,92,246,0.55)", fontSize: "1.1rem", flexShrink: 0 }}>⚕</div>
+            <HelioLogo variant="badge" size={38} badgeGradient={C.gradH} badgeRadius={12} badgeShadow="0 0 20px rgba(139,92,246,0.55)" />
             <div>
               <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: "1.4rem", fontWeight: 900, letterSpacing: "-0.04em", color: C.text, lineHeight: 1.1 }}>HELIO</div>
               <div style={{ fontSize: "0.56rem", color: C.textMuted, letterSpacing: "0.11em", textTransform: "uppercase" }}>Medication Intelligence</div>
@@ -176,7 +177,7 @@ export function LandingPage() {
       {/* HERO */}
       <section style={{ position: "relative", zIndex: 10, minHeight: isMobile ? "auto" : "780px", display: "flex", alignItems: "center", padding: `${isMobile ? 42 : 56}px ${px}px ${isMobile ? 36 : 46}px`, overflow: "hidden" }}>
         {/* 3D DNA Double Helix Model running in the background behind the content */}
-        <DnaModel3D style={{ opacity: 0.88 }} />
+        <DnaModel3D style={{ opacity: 0.94 }} />
 
         {/* Ambient radial scrim behind text for 100% legibility over 3D strands */}
         <div style={{ position: "absolute", top: "20%", left: isMobile ? "50%" : "25%", transform: "translate(-50%,-20%)", width: isMobile ? 360 : 640, height: isMobile ? 360 : 540, borderRadius: "50%", background: "radial-gradient(circle, rgba(8,8,15,0.85) 0%, rgba(8,8,15,0.45) 60%, transparent 100%)", filter: "blur(30px)", pointerEvents: "none", zIndex: 1 }} />
@@ -185,11 +186,56 @@ export function LandingPage() {
         <div style={{ position: "relative", zIndex: 2, maxWidth: 1320, width: "100%", margin: "0 auto" }}>
           <div style={{ maxWidth: isMobile ? "100%" : "720px", textAlign: isMobile ? "center" : "left" }}>
             
-            {/* User-Friendly Eyebrow Badge */}
-            <div style={{ marginBottom: 20, animation: "fadeUp 0.7s ease both", display: "inline-block" }}>
-              <div style={{ ...pill(C.cyan, "rgba(6,182,212,0.12)"), display: "inline-flex", boxShadow: "0 0 24px rgba(6,182,212,0.25)", border: "1px solid rgba(6,182,212,0.35)", padding: "7px 16px" }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", background: C.cyan, boxShadow: `0 0 10px ${C.cyan}`, animation: "pulse 1.8s infinite", flexShrink: 0 }} />
-                ✨ Smart, Safe Medication Guidance · Always On
+            {/* Clinical Precision Eyebrow Badge */}
+            <div style={{ marginBottom: 24, animation: "fadeUp 0.7s ease both", display: "inline-block" }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "4px 14px 4px 6px",
+                  borderRadius: 9999,
+                  background: "rgba(255, 255, 255, 0.035)",
+                  border: "1px solid rgba(255, 255, 255, 0.10)",
+                  backdropFilter: "blur(16px)",
+                  WebkitBackdropFilter: "blur(16px)",
+                  boxShadow: "0 2px 16px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.08)",
+                  cursor: "default",
+                  transition: "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "rgba(139, 92, 246, 0.35)";
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.055)";
+                  e.currentTarget.style.boxShadow = "0 4px 20px rgba(139, 92, 246, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.12)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.10)";
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.035)";
+                  e.currentTarget.style.boxShadow = "0 2px 16px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.08)";
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "3px 10px",
+                    borderRadius: 9999,
+                    background: "linear-gradient(135deg, rgba(139, 92, 246, 0.22) 0%, rgba(6, 182, 212, 0.22) 100%)",
+                    border: "1px solid rgba(139, 92, 246, 0.32)",
+                    color: "#C4B5FD",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10B981", boxShadow: "0 0 8px #10B981" }} />
+                  Clinical Safety
+                </span>
+
+                <span style={{ color: "#E2E8F0", fontSize: isMobile ? "0.78rem" : "0.83rem", fontWeight: 500, letterSpacing: "-0.01em" }}>
+                  Real-time drug interaction screening & adherence
+                </span>
               </div>
             </div>
 
@@ -206,17 +252,19 @@ export function LandingPage() {
               Instantly spot harmful pill clashes, receive gentle reminders for every dose, and get clear answers about side effects whenever you need them — zero confusion, just complete peace of mind.
             </p>
 
-            {/* Simplified Action Area */}
-            <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "center" : "flex-start", gap: 14, marginBottom: 32, animation: "fadeUp 0.8s 0.3s ease both" }}>
+            {/* Unified Action Area (Pixel-Perfect Alignment) */}
+            <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: "center", justifyContent: isMobile ? "center" : "flex-start", gap: 14, marginBottom: 32, animation: "fadeUp 0.8s 0.3s ease both" }}>
               <button
                 onClick={() => navigate("/login")}
                 style={{
+                  height: 52,
+                  minHeight: 52,
                   background: C.gradH,
                   border: "none",
                   color: "#FFFFFF",
-                  padding: isMobile ? "14px 28px" : "16px 36px",
+                  padding: isMobile ? "0 24px" : "0 32px",
                   borderRadius: 16,
-                  fontSize: isMobile ? "0.98rem" : "1.05rem",
+                  fontSize: isMobile ? "0.96rem" : "1.02rem",
                   fontWeight: 800,
                   cursor: "pointer",
                   fontFamily: "inherit",
@@ -225,10 +273,13 @@ export function LandingPage() {
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 10,
-                  transition: "all 0.25s",
+                  boxSizing: "border-box",
+                  lineHeight: 1,
+                  transition: "all 0.25s ease",
+                  width: isMobile ? "100%" : "auto",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-3px)";
+                  e.currentTarget.style.transform = "translateY(-2px)";
                   e.currentTarget.style.boxShadow = "0 14px 44px rgba(139,92,246,0.65), 0 0 28px rgba(6,182,212,0.35)";
                 }}
                 onMouseLeave={(e) => {
@@ -236,19 +287,21 @@ export function LandingPage() {
                   e.currentTarget.style.boxShadow = "0 8px 32px rgba(139,92,246,0.48), 0 0 20px rgba(6,182,212,0.22)";
                 }}
               >
-                <span>Get Started</span>
-                <span style={{ fontSize: "1.15rem" }}>→</span>
+                <span>Get Started Free</span>
+                <span style={{ fontSize: "1.15rem", lineHeight: 1 }}>→</span>
               </button>
 
               <button
-                onClick={() => navigate("/login?role=patient")}
+                onClick={() => navigate("/how-it-works")}
                 style={{
+                  height: 52,
+                  minHeight: 52,
                   background: "rgba(255,255,255,0.06)",
                   border: `1px solid ${C.border2}`,
                   color: "#FFFFFF",
-                  padding: isMobile ? "13px 24px" : "15px 28px",
+                  padding: isMobile ? "0 24px" : "0 28px",
                   borderRadius: 16,
-                  fontSize: isMobile ? "0.92rem" : "0.98rem",
+                  fontSize: isMobile ? "0.96rem" : "1.02rem",
                   fontWeight: 700,
                   cursor: "pointer",
                   fontFamily: "inherit",
@@ -257,21 +310,28 @@ export function LandingPage() {
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  gap: 8,
-                  transition: "all 0.25s",
+                  gap: 9,
+                  boxSizing: "border-box",
+                  lineHeight: 1,
+                  transition: "all 0.25s ease",
+                  width: isMobile ? "100%" : "auto",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = C.purple;
                   e.currentTarget.style.transform = "translateY(-2px)";
                   e.currentTarget.style.background = "rgba(139,92,246,0.15)";
+                  e.currentTarget.style.boxShadow = "0 6px 24px rgba(139,92,246,0.25)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.borderColor = C.border2;
                   e.currentTarget.style.transform = "translateY(0)";
                   e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                  e.currentTarget.style.boxShadow = "none";
                 }}
               >
-                <span>Explore Patient Portal</span>
+                <span style={{ fontSize: "1.05rem", lineHeight: 1 }}>⚡</span>
+                <span>See How It Works</span>
+                <span style={{ fontSize: "1.1rem", opacity: 0.7, lineHeight: 1 }}>→</span>
               </button>
             </div>
 
@@ -521,7 +581,7 @@ export function LandingPage() {
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr 1fr", gap: isMobile ? 32 : 64, marginBottom: 44 }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: C.gradH, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.9rem", boxShadow: "0 0 16px rgba(139,92,246,0.42)", flexShrink: 0 }}>⚕</div>
+                <HelioLogo variant="badge" size={34} badgeGradient={C.gradH} badgeRadius={10} badgeShadow="0 0 16px rgba(139,92,246,0.42)" />
                 <span style={{ fontFamily: "'Outfit',sans-serif", fontSize: "1.3rem", fontWeight: 900, color: C.text, letterSpacing: "-0.04em" }}>HELIO</span>
               </div>
               <p style={{ color: C.textMuted, fontSize: "0.86rem", lineHeight: 1.65, maxWidth: 270, marginBottom: 16 }}>AI-powered medication intelligence for enterprise healthcare. Protecting patients at every dose.</p>

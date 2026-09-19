@@ -24,6 +24,7 @@ import {
   ScanLine,
 } from "lucide-react";
 import { theme } from "../../theme/theme";
+import { HelioLogo } from "../../components/common/HelioLogo";
 import "./AuthPage.css";
 
 export function AuthPage() {
@@ -143,7 +144,7 @@ export function AuthPage() {
 
           <div className="auth-brand">
             <div className="auth-brand__icon">
-              <Sparkles size={22} color="#FFFFFF" />
+              <img src="/helio-logo-symbol-white.png" alt="HELIO Logo" style={{ width: 24, height: 24, objectFit: "contain" }} />
             </div>
             <div>
               <span className="auth-brand__wordmark">HELIO</span>

@@ -99,7 +99,7 @@ export function PatientChatPage() {
               boxShadow: '0 4px 16px rgba(124, 58, 237, 0.5)',
             }}
           >
-            <Sparkles size={24} color="#FFFFFF" />
+            <img src="/helio-logo-symbol-white.png" alt="Helio Logo" style={{ width: 28, height: 28, objectFit: "contain" }} />
           </div>
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#FFFFFF', margin: 0, fontFamily: theme.fonts.heading }}>

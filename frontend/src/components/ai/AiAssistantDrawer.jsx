@@ -138,7 +138,7 @@ export const AiAssistantDrawer = ({ isOpen, onClose }) => {
                 boxShadow: '0 4px 16px rgba(139, 92, 246, 0.4)',
               }}
             >
-              <Sparkles size={20} />
+              <img src="/helio-logo-symbol-white.png" alt="HELIO Logo" style={{ width: 22, height: 22, objectFit: "contain" }} />
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

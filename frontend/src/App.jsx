@@ -10,6 +10,7 @@ import { RoleRedirect } from './components/auth/RoleRedirect';
 
 // Public Marketing & Auth Views
 import { LandingPage } from './pages/landing/LandingPage';
+import { HowItWorksPage } from './pages/landing/HowItWorksPage';
 import { AuthPage } from './pages/auth/AuthPage';
 
 // Segregated Workspace Layouts (Anti-Vanilla Asymmetrical Architectures)
@@ -50,6 +51,7 @@ export function App() {
               1. PUBLIC MARKETING & CONVERSION LAYER
               ================================================================ */}
           <Route path="/" element={<LandingPage />} />
+          <Route path="/how-it-works" element={<HowItWorksPage />} />
 
           {/* ================================================================
               2. DEDICATED AUTHENTICATION & OAUTH LAYER

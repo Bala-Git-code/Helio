@@ -15,6 +15,7 @@ import {
   Search,
 } from 'lucide-react';
 import { theme } from '../theme/theme';
+import { HelioLogo } from '../components/common/HelioLogo';
 
 /**
  * ============================================================================
@@ -73,20 +74,13 @@ export function DoctorPortalLayout() {
             style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
             onClick={() => navigate('/doctor/dashboard')}
           >
-            <div
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #6D28D9 0%, #8B5CF6 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 14px rgba(139, 92, 246, 0.4)',
-              }}
-            >
-              <Stethoscope size={20} color="#FFFFFF" />
-            </div>
+            <HelioLogo
+              variant="badge"
+              size={38}
+              badgeRadius={12}
+              badgeGradient="linear-gradient(135deg, #6D28D9 0%, #8B5CF6 100%)"
+              badgeShadow="0 4px 14px rgba(139, 92, 246, 0.4)"
+            />
             <div>
               <div style={{ fontFamily: theme.fonts.heading, fontSize: '1.25rem', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.02em' }}>
                 HELIO
