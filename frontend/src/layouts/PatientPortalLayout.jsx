@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { theme } from '../theme/theme';
 import { AiAssistantDrawer } from '../components/ai/AiAssistantDrawer';
+import { HelioLogo } from '../components/common/HelioLogo';
 
 /**
  * ============================================================================
@@ -76,20 +77,13 @@ export function PatientPortalLayout() {
             style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
             onClick={() => navigate('/patient/dashboard')}
           >
-            <div
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #059669 0%, #10B981 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
-              }}
-            >
-              <HeartPulse size={20} color="#FFFFFF" />
-            </div>
+            <HelioLogo
+              variant="badge"
+              size={38}
+              badgeRadius={12}
+              badgeGradient="linear-gradient(135deg, #059669 0%, #10B981 100%)"
+              badgeShadow="0 4px 14px rgba(16, 185, 129, 0.35)"
+            />
             <div>
               <div style={{ fontFamily: theme.fonts.heading, fontSize: '1.25rem', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.02em' }}>
                 HELIO

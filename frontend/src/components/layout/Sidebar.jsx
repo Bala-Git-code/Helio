@@ -16,6 +16,7 @@ import {
   Users
 } from 'lucide-react';
 import { theme } from '../../theme/theme';
+import { HelioLogo } from '../common/HelioLogo';
 
 /**
  * ============================================================================
@@ -78,21 +79,13 @@ export const Sidebar = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div
-            style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
-              background: `linear-gradient(135deg, ${theme.colors.indigo600} 0%, ${theme.colors.teal500} 100%)`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 14px rgba(79, 70, 229, 0.4)',
-              color: '#FFFFFF',
-            }}
-          >
-            <Sparkles size={20} strokeWidth={2.2} />
-          </div>
+          <HelioLogo
+            variant="badge"
+            size={38}
+            badgeRadius={10}
+            badgeGradient={`linear-gradient(135deg, ${theme.colors.indigo600} 0%, ${theme.colors.teal500} 100%)`}
+            badgeShadow="0 4px 14px rgba(79, 70, 229, 0.4)"
+          />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span
               style={{
