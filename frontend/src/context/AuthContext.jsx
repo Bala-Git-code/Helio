@@ -1,122 +1,102 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 /**
  * ============================================================================
- * HELIO Enterprise Authentication & Role Management Context
+ * HELIO Enterprise Authentication & Session Context (context/AuthContext.jsx)
  * ============================================================================
  * 
- * Manages authenticated user session, role permission states ('patient' | 'doctor'),
- * Google OAuth integration hooks, live adherence scores, and role-based redirect pathways.
+ * Strict Security Architecture:
+ * - Zero-JWT & Zero-Password: Identity is backed exclusively by server-side Redis sessions.
+ * - Single Sign-On: Google OAuth 2.0 is the sole identity provider.
+ * - Browser Cookies: Communicates via rolling httpOnly session cookies ('helio.sid').
+ * - All internal API calls enforce `credentials: 'include'`.
  */
 
 const AuthContext = createContext(null);
 
-const STORAGE_KEY = 'helio_auth_state';
-
-const DEFAULT_PATIENT = {
-  id: 'usr_pat_9921',
-  name: 'Elena Rostova',
-  email: 'elena.rostova@heliohealth.io',
-  role: 'patient',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  condition: 'Type 2 Diabetes & Hypertension',
-  adherenceRate: 94,
-  streakDays: 14,
-};
-
-const DEFAULT_DOCTOR = {
-  id: 'usr_doc_4402',
-  name: 'Dr. Julian Vance, MD',
-  email: 'dr.vance@heliohealth.io',
-  role: 'doctor',
-  avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80',
-  specialty: 'Clinical Pharmacotherapy & Cardiology',
-  activePatientsCount: 148,
-  criticalAlertsCount: 3,
-};
-
 export function AuthProvider({ children }) {
-  // Load saved session or initialize as default active patient
-  const [user, setUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return DEFAULT_PATIENT;
-  });
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState(null);
 
-  const [isLoading, setIsLoading] = useState(false);
+  /**
+   * Introspect current active session from Redis session store
+   */
+  const checkSession = useCallback(async () => {
+    setIsLoading(true);
+    setAuthError(null);
+    try {
+      const response = await fetch('/api/auth/me', {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.authenticated && data.user) {
+          setUser(data.user);
+        } else {
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
+    } catch (err) {
+      // In standalone frontend development or network interruptions
+      console.warn('[HELIO AUTH] Session check status:', err.message);
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    try {
-      if (user) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-      } else {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    } catch {
-      // ignore
-    }
-  }, [user]);
+    checkSession();
+  }, [checkSession]);
 
   /**
-   * Simulated Google OAuth Login
-   * Accepts target role ('patient' or 'doctor')
+   * Google OAuth 2.0 Redirect Trigger
+   * Dispatches top-level navigation to the backend Google OAuth endpoint
+   * with the selected clinical role passed in the query parameter.
    */
-  const loginWithGoogle = async (preferredRole = 'patient') => {
+  const loginWithGoogle = (preferredRole = 'patient') => {
+    const roleParam = encodeURIComponent(preferredRole);
+    // Top-level browser navigation to OAuth flow
+    window.location.href = `/api/auth/google?role=${roleParam}`;
+  };
+
+  /**
+   * Session Termination
+   * Destroys server-side Redis session and revokes the 'helio.sid' cookie
+   */
+  const logout = async () => {
     setIsLoading(true);
     try {
-      // Simulate OAuth network latency
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      const newUser = preferredRole === 'doctor' ? DEFAULT_DOCTOR : DEFAULT_PATIENT;
-      setUser(newUser);
-      return { success: true, user: newUser };
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+    } catch (err) {
+      console.warn('[HELIO AUTH] Server logout warning:', err.message);
     } finally {
+      setUser(null);
       setIsLoading(false);
+      window.location.href = '/login';
     }
   };
 
   /**
-   * Email/Password Auth
+   * Local state updater for real-time patient dose tracking
    */
-  const login = async (email, password, preferredRole = 'patient') => {
-    setIsLoading(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      const baseUser = preferredRole === 'doctor' ? DEFAULT_DOCTOR : DEFAULT_PATIENT;
-      const loggedUser = { ...baseUser, email: email || baseUser.email };
-      setUser(loggedUser);
-      return { success: true, user: loggedUser };
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  /**
-   * Switch between Patient and Doctor personas (vital for dev & demos)
-   */
-  const switchRole = (newRole) => {
-    if (newRole === 'doctor') {
-      setUser(DEFAULT_DOCTOR);
-    } else {
-      setUser(DEFAULT_PATIENT);
-    }
-  };
-
-  /**
-   * Dynamically update patient's adherence rate upon dose toggle
-   */
-  const updateAdherenceRate = (rate) => {
-    setUser((prev) => (prev ? { ...prev, adherenceRate: rate } : prev));
-  };
-
-  /**
-   * Sign out
-   */
-  const logout = () => {
-    setUser(null);
+  const updateAdherenceRate = (newRate) => {
+    setUser((prev) => (prev ? { ...prev, adherenceRate: newRate } : prev));
   };
 
   const value = {
@@ -128,10 +108,10 @@ export function AuthProvider({ children }) {
     adherenceRate: user?.adherenceRate ?? 94,
     streakDays: user?.streakDays ?? 14,
     isLoading,
+    authError,
     loginWithGoogle,
-    login,
     logout,
-    switchRole,
+    refreshSession: checkSession,
     updateAdherenceRate,
   };
 
@@ -145,3 +125,5 @@ export function useAuth() {
   }
   return context;
 }
+
+export default AuthContext;
