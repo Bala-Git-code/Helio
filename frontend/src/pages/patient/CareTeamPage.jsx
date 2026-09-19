@@ -11,6 +11,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { theme } from '../../theme/theme';
+import { ShareAccessCode } from '../../components/patient/ShareAccessCode';
 
 /**
  * ============================================================================
@@ -70,6 +71,9 @@ export const CareTeamPage = () => {
           Direct communication channels with your licensed physicians, clinical pharmacists, and prescribing specialists.
         </p>
       </div>
+
+      {/* Patient Pairing Access Delegation Card */}
+      <ShareAccessCode />
 
       {/* Clinicians Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(440px, 1fr))', gap: '20px' }}>

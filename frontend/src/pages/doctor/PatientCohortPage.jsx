@@ -14,8 +14,10 @@ import {
   Activity,
   AlertTriangle,
   Pill,
+  KeyRound,
 } from 'lucide-react';
 import { theme } from '../../theme/theme';
+import { LinkPatientModal } from '../../components/doctor/LinkPatientModal';
 
 /**
  * ============================================================================
@@ -26,6 +28,7 @@ export function PatientCohortPage() {
   const [search, setSearch] = useState('');
   const [selectedRiskFilter, setSelectedRiskFilter] = useState('all');
   const [activeChartPatient, setActiveChartPatient] = useState(null);
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
 
   const cohort = [
     {
@@ -154,7 +157,30 @@ export function PatientCohortPage() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => setIsLinkModalOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '7px',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              padding: '8px 16px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #06B6D4 0%, #3B82F6 100%)',
+              border: 'none',
+              color: '#FFFFFF',
+              cursor: 'pointer',
+              boxShadow: '0 4px 14px -2px rgba(59, 130, 246, 0.4)',
+              transition: theme.transitions.fast,
+            }}
+          >
+            <KeyRound size={14} />
+            <span>Link Patient (HL-Code)</span>
+          </button>
+
           {['all', 'critical', 'moderate', 'optimal'].map((rf) => (
             <button
               key={rf}
@@ -439,6 +465,12 @@ export function PatientCohortPage() {
           </div>
         </div>
       )}
+
+      {/* Doctor Access Claim Modal (HL-XXXX-XXXX) */}
+      <LinkPatientModal
+        isOpen={isLinkModalOpen}
+        onClose={() => setIsLinkModalOpen(false)}
+      />
     </div>
   );
 }

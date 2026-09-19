@@ -7,6 +7,11 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 
 import { connectDB, getDBStatus, closeDB } from './config/db.js';
+import sessionMiddleware from './config/session.js';
+import passport from './config/passport.js';
+import { validateOriginCsrf } from './middleware/security.js';
+import authRoutes from './routes/auth.routes.js';
+import clinicalRoutes from './routes/clinical.routes.js';
 
 /**
  * ============================================================================
@@ -79,6 +84,14 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// ---------------------------------------------------------------------------
+// Stateful Session Engine & Security Layer (Zero-JWT / Zero-Password)
+// ---------------------------------------------------------------------------
+app.use(sessionMiddleware);
+app.use(passport.initialize());
+app.use(passport.session());
+app.use(validateOriginCsrf);
+
 // HTTP Request Logging
 if (NODE_ENV === 'development') {
   app.use(morgan('dev'));
@@ -149,14 +162,11 @@ app.get('/', (req, res) => {
   });
 });
 
-// Future Route Registrations will be mounted under /api/v1:
-// app.use('/api/v1/auth', authRoutes);
-// app.use('/api/v1/patients', patientRoutes);
-// app.use('/api/v1/medications', medicationRoutes);
-// app.use('/api/v1/prescriptions', prescriptionRoutes);
-// app.use('/api/v1/adherence', adherenceRoutes);
-// app.use('/api/v1/interactions', interactionRoutes);
-// app.use('/api/v1/ai-consultation', aiConsultationRoutes);
+// Authentication & Session Routes (Pure Google OAuth 2.0)
+app.use('/api/auth', authRoutes);
+
+// Clinical Protocol & Delegation Routes (Pairing, Cohorts, Audit Trail)
+app.use('/api', clinicalRoutes);
 
 // ---------------------------------------------------------------------------
 // 5. 404 Route Catch-all
