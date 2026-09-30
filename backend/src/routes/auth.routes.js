@@ -6,20 +6,20 @@ import { AuditLog } from '../models/AuditLog.js';
 /**
  * ============================================================================
  * HELIO Enterprise Medication Intelligence Platform
- * Pure Google OAuth & Session Routes (routes/auth.routes.js)
+ * Google OAuth 2.0 & Redis Stateful Session Routes (routes/auth.routes.js)
  * ============================================================================
  * 
- * Architectural Highlights:
- * - Zero-JWT & Zero-Password: No credentials or tokens transmitted in headers.
- * - Stateful Redis Session: Maintained via 'helio.sid' rolling httpOnly cookie.
- * - Dynamic Role Provisioning: Captures target role ('patient' | 'doctor') via OAuth state.
+ * Architecture Rules:
+ * - Zero-JWT & Zero-Password: Google OAuth 2.0 is the sole authentication provider.
+ * - Stateful Sessions: Tied exclusively to 'helio.sid' session cookie in Redis.
+ * - Dynamic Role Handshake: Ingests clinical role via OAuth state parameter.
  */
 
 const router = express.Router();
 const FRONTEND_URL = process.env.CORS_ORIGIN || 'http://localhost:5173';
 
 /**
- * Initiate Google OAuth 2.0 Flow
+ * Initiate Google OAuth 2.0 Handshake
  * GET /api/auth/google?role=patient|doctor
  */
 router.get('/google', (req, res, next) => {
@@ -43,16 +43,16 @@ router.get(
     failureRedirect: `${FRONTEND_URL}/login?error=oauth_rejected`,
   }),
   (req, res) => {
-    // Determine redirect destination based on authenticated user's role
+    // Redirect to respective portal based on role
     const userRole = req.user?.role || 'patient';
-    const destination = userRole === 'doctor' ? '/doctor/dashboard' : '/patient/dashboard';
+    const redirectPath = userRole === 'doctor' ? '/doctor/dashboard' : '/patient/dashboard';
 
-    return res.redirect(`${FRONTEND_URL}${destination}`);
+    return res.redirect(`${FRONTEND_URL}${redirectPath}`);
   }
 );
 
 /**
- * Current Session Status & Profile Introspection
+ * Session Status & Profile Introspection
  * GET /api/auth/me
  */
 router.get('/me', (req, res) => {
@@ -71,8 +71,8 @@ router.get('/me', (req, res) => {
   return res.status(200).json({
     authenticated: true,
     user: {
-      id: user._id ? user._id.toString() : user.id,
-      name: user.name,
+      id: user._id ? user._id.toString() : (user.id || user.userId),
+      name: user.name || 'Helio User',
       email: user.email,
       role: user.role,
       avatar: user.avatar,
@@ -88,14 +88,15 @@ router.get('/me', (req, res) => {
 });
 
 /**
- * Session Termination & Cookie Revocation
+ * Terminate Stateful Session & Invalidate Cookie
  * POST /api/auth/logout
  */
 router.post('/logout', requireAuth, async (req, res, next) => {
-  const userId = req.user?.id || req.user?._id;
+  const userId = req.user?._id || req.user?.id || req.user?.userId;
   const ip = req.ip || req.connection?.remoteAddress || '127.0.0.1';
-  const userAgent = req.get('user-agent') || 'Unknown';
+  const userAgent = req.get('user-agent') || 'Unknown Client';
 
+  // HIPAA audit record for logout event
   try {
     await AuditLog.create({
       action: 'USER_LOGOUT',
@@ -105,11 +106,13 @@ router.post('/logout', requireAuth, async (req, res, next) => {
       status: 'SUCCESS',
       details: { timestamp: new Date().toISOString() },
     });
-  } catch {}
+  } catch (auditErr) {
+    console.warn('[HELIO AUDIT WARN] Failed to log user logout:', auditErr.message);
+  }
 
-  req.logout((err) => {
-    if (err) {
-      return next(err);
+  req.logout((logoutErr) => {
+    if (logoutErr) {
+      return next(logoutErr);
     }
 
     if (req.session) {
@@ -124,7 +127,7 @@ router.post('/logout', requireAuth, async (req, res, next) => {
         if (sessionErr) {
           return res.status(500).json({
             success: false,
-            error: 'Failed to fully purge server session.',
+            error: 'Failed to destroy Redis session token.',
           });
         }
 
@@ -134,7 +137,12 @@ router.post('/logout', requireAuth, async (req, res, next) => {
         });
       });
     } else {
-      res.clearCookie('helio.sid');
+      res.clearCookie('helio.sid', {
+        path: '/',
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+      });
       return res.status(200).json({
         success: true,
         message: 'Clinical session successfully terminated.',

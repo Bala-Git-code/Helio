@@ -179,7 +179,7 @@ export function LinkPatientModal({ isOpen, onClose, onSuccess }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(3, 7, 18, 0.82)',
+        backgroundColor: 'rgba(3, 7, 18, 0.85)',
         backdropFilter: 'blur(12px)',
         padding: '20px',
         fontFamily: "'Outfit', sans-serif",

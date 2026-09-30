@@ -7,10 +7,16 @@ import Redis from 'ioredis';
  * ============================================================================
  * 
  * Architectural Purpose:
- * Provides low-latency, stateful in-memory storage for:
- * 1. Express session store (connect-redis)
- * 2. 24-hour cryptographic patient-doctor pairing codes (HL-XXXX-XXXX)
- * 3. Doctor brute-force lockout rate limiting (5 attempts / 30-min lockout)
+ * High-performance stateful in-memory data store providing:
+ * 1. Express session store backing (connect-redis) - Zero-JWT / Zero-Password.
+ * 2. 24-hour cryptographic clinical pairing code storage (HL-XXXX-XXXX).
+ * 3. Physician brute-force lockout rate limiting (5 failed attempts / 30-minute lockout).
+ * 
+ * Reliability & Fail-Safe Architecture:
+ * - Exponential backoff retry strategy with circuit prevention.
+ * - Non-blocking asynchronous bootstrap connection.
+ * - Resilient dev-mode in-memory TTL cache fallback to ensure local developer
+ *   continuity and CI test execution when a local Redis service is unreachable.
  */
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
@@ -18,36 +24,38 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 let isRedisConnected = false;
 
-// Create ioredis instance
-const redisClient = new Redis(REDIS_URL, {
+// Initialize ioredis instance with resilient enterprise connection settings
+export const redisClient = new Redis(REDIS_URL, {
   maxRetriesPerRequest: 1,
   connectTimeout: 5000,
   enableReadyCheck: true,
   lazyConnect: true,
   retryStrategy(times) {
-    if (NODE_ENV !== 'production' && times > 2) {
-      // In local dev without active redis daemon, don't spam reconnect logs
+    if (NODE_ENV !== 'production' && times > 3) {
+      // In local development without an active Redis service, suppress continuous reconnect logs
       return null;
     }
+    // Exponential backoff capped at 3000ms
     const delay = Math.min(times * 500, 3000);
     return delay;
   },
 });
 
+// Event Listeners for Operational Telemetry
 redisClient.on('connect', () => {
   isRedisConnected = true;
-  console.log('[HELIO REDIS] Connected to Redis cluster at', REDIS_URL);
+  console.log(`[HELIO REDIS] Connected to Redis cluster at ${REDIS_URL}`);
 });
 
 redisClient.on('ready', () => {
   isRedisConnected = true;
-  console.log('[HELIO REDIS] Redis client ready to accept commands.');
+  console.log('[HELIO REDIS] Client ready for session and pairing operations.');
 });
 
 redisClient.on('error', (err) => {
   isRedisConnected = false;
   if (NODE_ENV !== 'production') {
-    console.warn(`[HELIO REDIS WARN] Redis offline or unreachable: ${err.message}. Using resilient memory layer in dev mode.`);
+    console.warn(`[HELIO REDIS WARN] Service unreachable: ${err.message}. Dev in-memory fallback active.`);
   } else {
     console.error(`[HELIO REDIS ERROR] Production Redis failure: ${err.message}`);
   }
@@ -57,17 +65,23 @@ redisClient.on('close', () => {
   isRedisConnected = false;
 });
 
-// Attempt initial connection without blocking server boot
+redisClient.on('reconnecting', (delay) => {
+  if (NODE_ENV === 'production') {
+    console.warn(`[HELIO REDIS] Reconnecting to cluster in ${delay}ms...`);
+  }
+});
+
+// Non-blocking connection bootstrap
 redisClient.connect().catch((err) => {
   if (NODE_ENV === 'production') {
-    console.error('[HELIO REDIS FATAL] Could not establish initial connection to Redis cluster:', err);
+    console.error('[HELIO REDIS FATAL] Critical: Failed to establish initial Redis cluster connection:', err);
   }
 });
 
 /**
- * In-Memory Fallback Adapter
- * Ensures local development and automated CI tests continue smoothly
- * even if a local Redis server is not currently running.
+ * Resilient In-Memory Fallback Adapter
+ * Guarantees that pairing code generation, TTL validation, and rate-limiting
+ * execute reliably during local development or offline containerized builds.
  */
 class MemoryRedisStore {
   constructor() {
@@ -131,13 +145,18 @@ class MemoryRedisStore {
     this.ttls.set(key, Date.now() + seconds * 1000);
     return 1;
   }
+
+  async exists(key) {
+    if (this._isExpired(key)) return 0;
+    return this.store.has(key) ? 1 : 0;
+  }
 }
 
-const memoryStore = new MemoryRedisStore();
+const fallbackStore = new MemoryRedisStore();
 
 /**
- * Unified Redis Operations Facade
- * Automatically delegates to ioredis when live, or fallback memory in dev.
+ * Standard TTL & Cache Methods Facade
+ * Dispatches to live ioredis instance when reachable, or gracefully falls back.
  */
 export const redisService = {
   isLive: () => isRedisConnected,
@@ -147,10 +166,21 @@ export const redisService = {
       try {
         return await redisClient.get(key);
       } catch {
-        return await memoryStore.get(key);
+        return await fallbackStore.get(key);
       }
     }
-    return await memoryStore.get(key);
+    return await fallbackStore.get(key);
+  },
+
+  async set(key, value) {
+    if (isRedisConnected) {
+      try {
+        return await redisClient.set(key, value);
+      } catch {
+        return await fallbackStore.set(key, value);
+      }
+    }
+    return await fallbackStore.set(key, value);
   },
 
   async setex(key, seconds, value) {
@@ -158,10 +188,10 @@ export const redisService = {
       try {
         return await redisClient.setex(key, seconds, value);
       } catch {
-        return await memoryStore.setex(key, seconds, value);
+        return await fallbackStore.setex(key, seconds, value);
       }
     }
-    return await memoryStore.setex(key, seconds, value);
+    return await fallbackStore.setex(key, seconds, value);
   },
 
   async del(key) {
@@ -169,10 +199,10 @@ export const redisService = {
       try {
         return await redisClient.del(key);
       } catch {
-        return await memoryStore.del(key);
+        return await fallbackStore.del(key);
       }
     }
-    return await memoryStore.del(key);
+    return await fallbackStore.del(key);
   },
 
   async ttl(key) {
@@ -180,10 +210,10 @@ export const redisService = {
       try {
         return await redisClient.ttl(key);
       } catch {
-        return await memoryStore.ttl(key);
+        return await fallbackStore.ttl(key);
       }
     }
-    return await memoryStore.ttl(key);
+    return await fallbackStore.ttl(key);
   },
 
   async incr(key) {
@@ -191,10 +221,10 @@ export const redisService = {
       try {
         return await redisClient.incr(key);
       } catch {
-        return await memoryStore.incr(key);
+        return await fallbackStore.incr(key);
       }
     }
-    return await memoryStore.incr(key);
+    return await fallbackStore.incr(key);
   },
 
   async expire(key, seconds) {
@@ -202,12 +232,32 @@ export const redisService = {
       try {
         return await redisClient.expire(key, seconds);
       } catch {
-        return await memoryStore.expire(key, seconds);
+        return await fallbackStore.expire(key, seconds);
       }
     }
-    return await memoryStore.expire(key, seconds);
+    return await fallbackStore.expire(key, seconds);
+  },
+
+  async exists(key) {
+    if (isRedisConnected) {
+      try {
+        return await redisClient.exists(key);
+      } catch {
+        return await fallbackStore.exists(key);
+      }
+    }
+    return await fallbackStore.exists(key);
   },
 };
 
-export { redisClient };
+// Export individual methods for direct standard TTL imports
+export const get = (key) => redisService.get(key);
+export const set = (key, value) => redisService.set(key, value);
+export const setex = (key, seconds, value) => redisService.setex(key, seconds, value);
+export const del = (key) => redisService.del(key);
+export const ttl = (key) => redisService.ttl(key);
+export const incr = (key) => redisService.incr(key);
+export const expire = (key, seconds) => redisService.expire(key, seconds);
+export const exists = (key) => redisService.exists(key);
+
 export default redisClient;

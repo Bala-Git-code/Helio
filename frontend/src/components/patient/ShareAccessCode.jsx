@@ -4,13 +4,10 @@ import {
   Copy,
   Check,
   Clock,
-  ShieldAlert,
   ShieldCheck,
   RefreshCw,
-  Sparkles,
   Lock,
 } from 'lucide-react';
-import { theme } from '../../theme/theme';
 
 /**
  * ============================================================================
@@ -19,9 +16,9 @@ import { theme } from '../../theme/theme';
  * 
  * Cryptographic Access Delegation:
  * - Displays active 24-hour pairing code (format: HL-XXXX-XXXX).
- * - Real-time 24-hour countdown timer with dynamic radial/bar telemetry.
+ * - Real-time 24-hour countdown ticker with dynamic telemetry bar.
  * - Single-click clipboard copying with visual confirmation.
- * - Communicates with /api/patient/pairing-code via stateful Redis sessions.
+ * - Authenticated with /api/patient/pairing-code via stateful Redis sessions.
  */
 export function ShareAccessCode() {
   const [activeCode, setActiveCode] = useState(null);

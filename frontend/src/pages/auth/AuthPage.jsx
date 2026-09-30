@@ -9,19 +9,20 @@ import {
   User,
   AlertCircle,
   Loader2,
-  Mail,
-  Lock,
-  Sparkles,
 } from 'lucide-react';
 
 /**
  * ============================================================================
- * HELIO Platform - Authentication Page (AuthPage.jsx)
- * Pinterest-inspired split aesthetic: Visual card with ambient underglow +
- * sleek, uncluttered modern dark form.
- * 
- * Self-contained: All CSS is bundled directly in this file.
+ * HELIO Enterprise Medication Intelligence Platform
+ * Authentication Gateway (pages/auth/AuthPage.jsx)
  * ============================================================================
+ * 
+ * Design Principles:
+ * - Master UI/UX Palette: Deep obsidian foundation (#08080F).
+ * - Dynamic Hero Imaging: Seamlessly crossfades between /images/patient-auth.jpg
+ *   and /images/doctor-auth.jpg depending on active role selection.
+ * - Minimalist & Human-Centric: Clean, distraction-free Google SSO without
+ *   technical jargon or noisy feature checklists.
  */
 export function AuthPage() {
   const navigate = useNavigate();
@@ -33,11 +34,10 @@ export function AuthPage() {
   const oauthError = searchParams.get('error');
 
   const [selectedRole, setSelectedRole] = useState(initialRole);
-  const [emailInput, setEmailInput] = useState('');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setMounted(true), 40);
+    const timer = setTimeout(() => setMounted(true), 30);
     return () => clearTimeout(timer);
   }, []);
 
@@ -59,12 +59,6 @@ export function AuthPage() {
     loginWithGoogle(selectedRole);
   };
 
-  const handleEmailSubmit = (e) => {
-    e.preventDefault();
-    // Default enterprise flow redirects to Google OAuth with selected role
-    loginWithGoogle(selectedRole);
-  };
-
   return (
     <div className={`helio-auth-root ${isDoctor ? 'theme-doctor' : 'theme-patient'}`}>
       {/* Embedded Self-Contained Styles */}
@@ -72,7 +66,7 @@ export function AuthPage() {
         .helio-auth-root {
           min-height: 100vh;
           width: 100%;
-          background-color: #06080F;
+          background-color: #08080F;
           color: #F8FAFC;
           font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
           display: flex;
@@ -84,12 +78,12 @@ export function AuthPage() {
           overflow: hidden;
         }
 
-        /* Subtle radial ambient background */
+        /* Subtle ambient radial background */
         .helio-auth-root::before {
           content: '';
           position: absolute;
           inset: 0;
-          background: radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.6) 0%, #06080F 85%);
+          background: radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.65) 0%, #08080F 85%);
           pointer-events: none;
         }
 
@@ -124,7 +118,7 @@ export function AuthPage() {
           transform: translateX(-3px);
         }
 
-        /* Master Centered Composition (Inspired by Pinterest Pin) */
+        /* Master Centered Composition Frame */
         .auth-master-frame {
           position: relative;
           z-index: 10;
@@ -132,7 +126,7 @@ export function AuthPage() {
           align-items: center;
           justify-content: center;
           gap: 56px;
-          max-width: 940px;
+          max-width: 900px;
           width: 100%;
           opacity: 0;
           transform: translateY(16px) scale(0.99);
@@ -145,44 +139,43 @@ export function AuthPage() {
         }
 
         /* ============================================================
-           LEFT SIDE: Visual Card with Ambient Underglow
+           LEFT SIDE: Visual Healthcare Card with Dynamic Ambient Glow
            ============================================================ */
         .auth-visual-column {
           position: relative;
           flex-shrink: 0;
         }
 
-        /* Soft ambient shadow beneath the visual card */
         .auth-visual-underglow {
           position: absolute;
           inset: 20px 10px -20px 10px;
           border-radius: 32px;
           filter: blur(40px);
-          opacity: 0.35;
+          opacity: 0.4;
           z-index: 1;
           transition: background 0.6s ease;
           pointer-events: none;
         }
 
         .theme-patient .auth-visual-underglow {
-          background: radial-gradient(ellipse at center, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.05) 60%, transparent 80%);
+          background: radial-gradient(ellipse at center, rgba(16, 185, 129, 0.25) 0%, rgba(5, 150, 105, 0.08) 60%, transparent 80%);
         }
 
         .theme-doctor .auth-visual-underglow {
-          background: radial-gradient(ellipse at center, rgba(37, 99, 235, 0.2) 0%, rgba(30, 64, 175, 0.05) 60%, transparent 80%);
+          background: radial-gradient(ellipse at center, rgba(37, 99, 235, 0.25) 0%, rgba(56, 189, 248, 0.08) 60%, transparent 80%);
         }
 
         .auth-visual-card {
           position: relative;
           z-index: 2;
           width: 360px;
-          height: 520px;
+          height: 480px;
           border-radius: 28px;
           overflow: hidden;
           background: #0B0F19;
           border: 1px solid rgba(255, 255, 255, 0.09);
           box-shadow: 
-            0 24px 60px -10px rgba(0, 0, 0, 0.8),
+            0 24px 60px -10px rgba(0, 0, 0, 0.85),
             inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
         }
 
@@ -199,7 +192,6 @@ export function AuthPage() {
           transform: scale(1.035);
         }
 
-        /* Dark Vignette Overlay for bottom text legibility */
         .auth-visual-card__scrim {
           position: absolute;
           inset: 0;
@@ -207,19 +199,18 @@ export function AuthPage() {
             to bottom,
             rgba(0, 0, 0, 0.1) 0%,
             transparent 45%,
-            rgba(6, 8, 15, 0.8) 75%,
-            rgba(6, 8, 15, 0.98) 100%
+            rgba(8, 8, 15, 0.82) 75%,
+            rgba(8, 8, 15, 0.98) 100%
           );
           pointer-events: none;
         }
 
-        /* Bottom Branding Bar inside Visual Card */
         .auth-visual-card__footer {
           position: absolute;
           bottom: 0;
           left: 0;
           right: 0;
-          padding: 24px 24px;
+          padding: 24px;
           z-index: 3;
         }
 
@@ -276,21 +267,21 @@ export function AuthPage() {
 
         .auth-form-title {
           font-family: 'Space Grotesk', -apple-system, sans-serif;
-          font-size: 2.1rem;
+          font-size: 2.15rem;
           font-weight: 700;
           color: #FFFFFF;
           letter-spacing: -0.03em;
-          margin: 0 0 6px 0;
+          margin: 0 0 8px 0;
         }
 
         .auth-form-subtitle {
-          font-size: 0.88rem;
+          font-size: 0.9rem;
           color: #94A3B8;
-          margin: 0 0 24px 0;
+          margin: 0 0 28px 0;
           line-height: 1.45;
         }
 
-        /* Error Notification */
+        /* Error Banner */
         .auth-error-chip {
           display: flex;
           align-items: center;
@@ -301,10 +292,10 @@ export function AuthPage() {
           padding: 10px 14px;
           border-radius: 12px;
           font-size: 0.8rem;
-          margin-bottom: 20px;
+          margin-bottom: 22px;
         }
 
-        /* Segmented Role Selector */
+        /* Segmented Role Switcher */
         .auth-segmented-control {
           position: relative;
           display: grid;
@@ -313,7 +304,7 @@ export function AuthPage() {
           border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 9999px;
           padding: 4px;
-          margin-bottom: 18px;
+          margin-bottom: 30px;
         }
 
         .auth-segment-indicator {
@@ -346,13 +337,13 @@ export function AuthPage() {
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 7px;
-          padding: 10px 14px;
+          gap: 8px;
+          padding: 11px 16px;
           border: none;
           background: transparent;
           color: #94A3B8;
           font-family: inherit;
-          font-size: 0.86rem;
+          font-size: 0.88rem;
           font-weight: 600;
           cursor: pointer;
           border-radius: 9999px;
@@ -363,130 +354,72 @@ export function AuthPage() {
           color: #FFFFFF;
         }
 
-        /* Minimal Input Field */
-        .auth-input-group {
-          position: relative;
-          display: flex;
-          align-items: center;
-          background: rgba(255, 255, 255, 0.035);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 14px;
-          padding: 13px 16px;
-          margin-bottom: 18px;
-          transition: border-color 0.2s ease, background 0.2s ease;
-        }
-
-        .auth-input-group:focus-within {
-          border-color: rgba(255, 255, 255, 0.24);
-          background: rgba(255, 255, 255, 0.05);
-        }
-
-        .auth-input-icon {
-          color: #64748B;
-          margin-right: 12px;
-          flex-shrink: 0;
-        }
-
-        .auth-input-field {
+        /* Google OAuth Primary CTA */
+        .auth-btn-google-sso {
           width: 100%;
-          background: transparent;
-          border: none;
-          outline: none;
-          color: #FFFFFF;
-          font-family: inherit;
-          font-size: 0.88rem;
-        }
-
-        .auth-input-field::placeholder {
-          color: #64748B;
-        }
-
-        /* Primary Action Button (Vibrant Pill Button - Matching Pin Style) */
-        .auth-btn-primary {
-          width: 100%;
-          padding: 14px 20px;
+          padding: 15px 22px;
           border-radius: 9999px;
+          background: #FFFFFF;
           border: none;
+          color: #0F172A;
           font-family: inherit;
-          font-size: 0.92rem;
+          font-size: 0.95rem;
           font-weight: 700;
-          color: #FFFFFF;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 10px;
+          gap: 12px;
           transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-          margin-bottom: 12px;
+          margin-bottom: 16px;
+          box-shadow: 0 4px 20px -2px rgba(255, 255, 255, 0.16);
         }
 
-        .theme-patient .auth-btn-primary {
-          background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-          box-shadow: 0 6px 20px -3px rgba(16, 185, 129, 0.35);
-        }
-
-        .theme-doctor .auth-btn-primary {
-          background: linear-gradient(135deg, #38BDF8 0%, #2563EB 100%);
-          box-shadow: 0 6px 20px -3px rgba(56, 189, 248, 0.35);
-        }
-
-        .auth-btn-primary:hover {
+        .auth-btn-google-sso:hover {
           transform: translateY(-2px);
-          filter: brightness(1.08);
+          box-shadow: 0 8px 26px -2px rgba(255, 255, 255, 0.25);
+          background: #F8FAFC;
         }
 
-        .auth-btn-primary:active {
+        .auth-btn-google-sso:active {
           transform: translateY(0);
         }
 
-        /* Secondary Pill Button: Continue with Google (Matching Pin Style) */
-        .auth-btn-google {
-          width: 100%;
-          padding: 13px 20px;
-          border-radius: 9999px;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          color: #F1F5F9;
-          font-family: inherit;
-          font-size: 0.9rem;
-          font-weight: 600;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          transition: all 0.22s ease;
-          margin-bottom: 24px;
+        .auth-btn-google-sso:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
         }
 
-        .auth-btn-google:hover {
-          background: rgba(255, 255, 255, 0.09);
-          border-color: rgba(255, 255, 255, 0.22);
-          transform: translateY(-1px);
-        }
-
-        .auth-btn-google:active {
-          transform: translateY(0);
-        }
-
-        .auth-btn-google__icon {
+        .auth-google-logo {
           flex-shrink: 0;
         }
 
-        /* Footer Prompt (Matching Pin: "Already have an account? Sign In") */
+        /* Clean Micro-Notice */
+        .auth-micro-notice {
+          text-align: center;
+          font-size: 0.78rem;
+          color: #64748B;
+          margin: 0 0 32px 0;
+          line-height: 1.45;
+        }
+
+        /* Footer Prompt */
         .auth-form-footer {
           text-align: center;
-          font-size: 0.8rem;
+          font-size: 0.82rem;
           color: #64748B;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
+          border-top: 1px solid rgba(255, 255, 255, 0.06);
+          padding-top: 20px;
         }
 
         .auth-footer-link {
           color: #94A3B8;
           text-decoration: none;
+          font-weight: 500;
           transition: color 0.2s ease;
         }
 
@@ -494,18 +427,12 @@ export function AuthPage() {
           color: #FFFFFF;
         }
 
-        .auth-footer-link.highlight {
-          color: ${isDoctor ? '#38BDF8' : '#10B981'};
-          font-weight: 600;
-        }
-
         .auth-security-caption {
           display: inline-flex;
           align-items: center;
           gap: 6px;
-          font-size: 0.72rem;
+          font-size: 0.74rem;
           color: #475569;
-          margin-top: 4px;
         }
 
         /* Responsive Breakpoints */
@@ -550,11 +477,11 @@ export function AuthPage() {
         </Link>
       </nav>
 
-      {/* Master 2-Column Pinterest-Inspired Layout */}
+      {/* Master 2-Column Composition */}
       <main className={`auth-master-frame ${mounted ? 'is-visible' : ''}`}>
         
         {/* ================================================================
-            LEFT: Visual Healthcare Card with Ambient Underglow
+            LEFT: Visual Healthcare Card with Dynamic Hero Crossfade
             ================================================================ */}
         <section className="auth-visual-column">
           <div className="auth-visual-underglow" />
@@ -562,7 +489,7 @@ export function AuthPage() {
           <div className="auth-visual-card">
             <img
               src={isDoctor ? '/images/doctor-auth.jpg' : '/images/patient-auth.jpg'}
-              alt={isDoctor ? 'HELIO Doctor Clinical Care' : 'HELIO Patient Medication Care'}
+              alt={isDoctor ? 'HELIO Doctor Clinical Portal' : 'HELIO Patient Health Portal'}
               className="auth-visual-card__img"
             />
             <div className="auth-visual-card__scrim" />
@@ -575,24 +502,24 @@ export function AuthPage() {
                   className="auth-brand-logo-img"
                 />
                 <span className="auth-brand-text">HELIO</span>
-                <span className="auth-brand-badge-pill">{isDoctor ? 'CLINICAL' : 'HEALTH'}</span>
+                <span className="auth-brand-badge-pill">{isDoctor ? 'DOCTOR' : 'PATIENT'}</span>
               </div>
               <p className="auth-brand-tagline">
                 {isDoctor
-                  ? 'Real-time cohort alerts & interaction safety.'
-                  : 'Gentle medication tracking & doctor sync.'}
+                  ? 'Clinical decision support & patient cohort oversight.'
+                  : 'Personalized medication tracking & care collaboration.'}
               </p>
             </div>
           </div>
         </section>
 
         {/* ================================================================
-            RIGHT: Sleek Modern Auth Form
+            RIGHT: Clean Minimalist Sign-In Form
             ================================================================ */}
         <section className="auth-form-column">
           <h1 className="auth-form-title">Sign in to HELIO</h1>
           <p className="auth-form-subtitle">
-            Choose your account role to access your portal
+            Choose your account to access your portal
           </p>
 
           {/* Feedback error banner */}
@@ -626,79 +553,61 @@ export function AuthPage() {
             </button>
           </div>
 
-          {/* Clean Input Form (Matching the visual structure of the pin) */}
-          <form onSubmit={handleEmailSubmit}>
-            <div className="auth-input-group">
-              <Mail size={16} className="auth-input-icon" />
-              <input
-                type="email"
-                placeholder="Enter your work or personal email"
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                className="auth-input-field"
-              />
-            </div>
-
-            {/* Primary Action Button (Vibrant Pill Button) */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="auth-btn-primary"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 size={17} className="animate-spin" />
-                  <span>Signing In...</span>
-                </>
-              ) : (
-                <>
-                  <span>Sign In as {isDoctor ? 'Doctor' : 'Patient'}</span>
-                  <ArrowRight size={16} />
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Secondary Action: Continue with Google (Matching Pinterest Style) */}
+          {/* Primary Action Button: Single-Click Google OAuth SSO */}
           <button
             type="button"
             onClick={handleGoogleSignIn}
             disabled={isLoading}
-            className="auth-btn-google"
-            aria-label="Continue with Google"
+            className="auth-btn-google-sso"
+            aria-label={`Continue with Google as ${isDoctor ? 'Doctor' : 'Patient'}`}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" className="auth-btn-google__icon">
-              <path
-                fill="#4285F4"
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-              />
-            </svg>
-            <span>Continue with Google</span>
+            {isLoading ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                <span>Connecting to Google...</span>
+              </>
+            ) : (
+              <>
+                <svg width="18" height="18" viewBox="0 0 24 24" className="auth-google-logo">
+                  <path
+                    fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                  />
+                </svg>
+                <span>Continue with Google as {isDoctor ? 'Doctor' : 'Patient'}</span>
+                <ArrowRight size={16} style={{ marginLeft: 'auto' }} />
+              </>
+            )}
           </button>
 
-          {/* Footer (Matching Pin: "Already have an account? Sign In") */}
+          {/* Simple Reassuring Security Note */}
+          <p className="auth-micro-notice">
+            Fast, secure single sign-on with your Google account.
+          </p>
+
+          {/* Footer & Standard Healthcare Compliance Seal */}
           <div className="auth-form-footer">
             <div>
-              <span>Need help accessing? </span>
-              <a href="mailto:support@helio.health" className="auth-footer-link highlight">
+              <span>Need assistance? </span>
+              <a href="mailto:support@helio.health" className="auth-footer-link">
                 Contact Support
               </a>
             </div>
             <div className="auth-security-caption">
-              <ShieldCheck size={13} />
-              <span>HIPAA Compliant · 256-Bit SSL Encrypted</span>
+              <ShieldCheck size={13} color="#10B981" />
+              <span>HIPAA Compliant · 256-Bit SSL Encryption</span>
             </div>
           </div>
         </section>

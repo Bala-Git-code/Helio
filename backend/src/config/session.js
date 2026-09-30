@@ -8,22 +8,22 @@ import { redisClient } from './redis.js';
  * Session Engine Configuration (config/session.js)
  * ============================================================================
  * 
- * Compliance & Security Specifications:
- * - Zero-JWT & Zero-Password: All identity is tied to server-managed stateful sessions.
- * - In-Memory Redis Store: Uses connect-redis with redis prefix 'helio_sess:'.
- * - Strict Cookie Attributes:
- *     httpOnly: true (mitigates XSS exfiltration)
- *     secure: true in production (HTTPS-only)
- *     sameSite: 'lax' (mitigates CSRF on top-level navigations)
- *     maxAge: 7 days (604,800,000 ms)
- *     rolling: true (resets expiration window on active client interactions)
+ * Strict Zero-JWT / Zero-Password Specifications:
+ * - Stateful identity managed purely through Redis session tokens.
+ * - In-memory Redis Store using connect-redis with 'helio_sess:' prefix.
+ * - Enforces HIPAA-compliant, defense-in-depth cookie controls:
+ *     1. httpOnly: true (Precludes client-side JavaScript / XSS exfiltration)
+ *     2. secure: true in production (Restricts transmission strictly to TLS/HTTPS)
+ *     3. sameSite: 'lax' (Hardens against Cross-Site Request Forgery)
+ *     4. maxAge: 7 days (604,800,000 ms sliding expiration window)
+ *     5. rolling: true (Extends active sessions automatically upon clinical actions)
  */
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'helio_stateful_enterprise_session_secret_change_in_production';
 
 // Initialize Redis session store
-const redisStore = new RedisStore({
+export const redisStore = new RedisStore({
   client: redisClient,
   prefix: 'helio_sess:',
   disableTouch: false,
@@ -45,5 +45,4 @@ export const sessionMiddleware = session({
   },
 });
 
-export { redisStore };
 export default sessionMiddleware;

@@ -6,10 +6,10 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
  * ============================================================================
  * 
  * Strict Security Architecture:
- * - Zero-JWT & Zero-Password: Identity is backed exclusively by server-side Redis sessions.
+ * - Zero-JWT & Zero-Password: Authentication is backed exclusively by server-side Redis sessions.
  * - Single Sign-On: Google OAuth 2.0 is the sole identity provider.
  * - Browser Cookies: Communicates via rolling httpOnly session cookies ('helio.sid').
- * - All internal API calls enforce `credentials: 'include'`.
+ * - All internal API calls strictly enforce `credentials: 'include'`.
  */
 
 const AuthContext = createContext(null);
@@ -45,8 +45,7 @@ export function AuthProvider({ children }) {
         setUser(null);
       }
     } catch (err) {
-      // In standalone frontend development or network interruptions
-      console.warn('[HELIO AUTH] Session check status:', err.message);
+      console.warn('[HELIO AUTH] Session check warning:', err.message);
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -64,7 +63,6 @@ export function AuthProvider({ children }) {
    */
   const loginWithGoogle = (preferredRole = 'patient') => {
     const roleParam = encodeURIComponent(preferredRole);
-    // Top-level browser navigation to OAuth flow
     window.location.href = `/api/auth/google?role=${roleParam}`;
   };
 

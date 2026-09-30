@@ -1,14 +1,16 @@
 /**
  * ============================================================================
  * HELIO Enterprise Medication Intelligence Platform
- * Security Middleware (middleware/security.js)
+ * Security & Access Control Middleware (middleware/security.js)
  * ============================================================================
  * 
- * Defense Specifications:
- * 1. CSRF Defense: Header-based Origin/Referer verification on state-changing requests
- *    (POST, PUT, PATCH, DELETE) ensuring browser requests originate from verified Helio domains.
- * 2. Session Authentication: Validates stateful session rehydration from Redis.
- * 3. Clinical Role Isolation: Restricts endpoints to authorized clinical roles ('patient', 'doctor').
+ * Defense-in-Depth Specifications:
+ * 1. CSRF Defense: Header-based Origin and Referer validation on all state-changing
+ *    HTTP methods (POST, PUT, PATCH, DELETE) to thwart Cross-Site Request Forgery.
+ * 2. Session Authentication: Validates that an incoming request possesses an active,
+ *    rehydrated Redis session without relying on client-side JWTs.
+ * 3. Role-Based Access Control (RBAC): Strictly enforces separation of clinical
+ *    privileges between 'patient' and 'doctor' actors.
  */
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -21,17 +23,17 @@ const defaultAllowedOrigins = [
 ];
 
 /**
- * CSRF Defense Middleware
- * Enforces Origin / Referer integrity on all state-changing HTTP verbs.
+ * Header-based CSRF Validation Middleware
+ * Enforces Origin / Referer integrity for all state-mutating HTTP requests.
  */
 export const validateOriginCsrf = (req, res, next) => {
-  const stateChangingMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
+  const stateMutatingMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
-  if (!stateChangingMethods.includes(req.method)) {
+  if (!stateMutatingMethods.includes(req.method)) {
     return next();
   }
 
-  // Exempt specific OAuth callbacks or health probes if needed
+  // Exempt external OAuth callbacks
   if (req.path.startsWith('/api/auth/google/callback')) {
     return next();
   }
@@ -39,32 +41,41 @@ export const validateOriginCsrf = (req, res, next) => {
   const originHeader = req.get('origin');
   const refererHeader = req.get('referer');
 
-  const candidate = originHeader || (refererHeader ? new URL(refererHeader).origin : null);
+  let candidateOrigin = null;
+  if (originHeader) {
+    candidateOrigin = originHeader;
+  } else if (refererHeader) {
+    try {
+      candidateOrigin = new URL(refererHeader).origin;
+    } catch {
+      candidateOrigin = null;
+    }
+  }
 
-  if (!candidate) {
-    // In development mode, allow non-browser API test tools (curl, postman) without origin header
+  // If both Origin and Referer headers are absent
+  if (!candidateOrigin) {
+    // In local development or automated testing, allow CLI/curl tooling
     if (NODE_ENV !== 'production') {
       return next();
     }
     return res.status(403).json({
       success: false,
-      error: 'CSRF validation rejected: Missing Origin or Referer header on state-changing transaction.',
+      error: 'CSRF validation rejected: Missing Origin or Referer header on state-changing request.',
       code: 'CSRF_HEADER_MISSING',
     });
   }
 
-  // Verify against whitelist
+  // Verify candidate origin against allowed origins whitelist
   const isAllowed = defaultAllowedOrigins.some((allowed) => {
     try {
-      const allowedOrigin = new URL(allowed).origin;
-      return candidate === allowedOrigin;
+      return candidateOrigin === new URL(allowed).origin;
     } catch {
-      return candidate === allowed;
+      return candidateOrigin === allowed;
     }
   });
 
   if (!isAllowed) {
-    console.warn(`[HELIO CSRF BLOCK] Blocked request from unauthorized origin: ${candidate}`);
+    console.warn(`[HELIO CSRF ALERT] Blocked request from untrusted origin: ${candidateOrigin}`);
     return res.status(403).json({
       success: false,
       error: 'CSRF validation failed: Request origin is not permitted.',
@@ -76,8 +87,8 @@ export const validateOriginCsrf = (req, res, next) => {
 };
 
 /**
- * Session Verification Middleware
- * Ensures the client holds an active, rehydrated session from Redis.
+ * Stateful Session Authentication Guard
+ * Ensures the incoming request holds a valid Redis session rehydrated by Passport.
  */
 export const requireAuth = (req, res, next) => {
   const isAuthenticated = req.isAuthenticated ? req.isAuthenticated() : Boolean(req.user || req.session?.passport?.user);
@@ -90,7 +101,7 @@ export const requireAuth = (req, res, next) => {
     });
   }
 
-  // Ensure req.user is uniformly populated
+  // Guarantee req.user is consistently accessible
   if (!req.user && req.session?.passport?.user) {
     req.user = req.session.passport.user;
   }
@@ -99,8 +110,8 @@ export const requireAuth = (req, res, next) => {
 };
 
 /**
- * Role Guard Middleware
- * Enforces segregation of clinical permissions (e.g., patient vs doctor workspace).
+ * Role Authorization Guard
+ * Enforces clinical role segregation (e.g. 'patient' vs 'doctor').
  * 
  * @param {string|string[]} allowedRoles
  */
@@ -111,7 +122,7 @@ export const requireRole = (allowedRoles) => {
     if (!req.user || !req.user.role) {
       return res.status(401).json({
         success: false,
-        error: 'Authentication required to evaluate role permissions.',
+        error: 'Authentication required to determine clinical authorization role.',
         code: 'AUTH_ROLE_UNKNOWN',
       });
     }
@@ -119,7 +130,7 @@ export const requireRole = (allowedRoles) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        error: `Access denied. Requires one of [${roles.join(', ')}] role credentials. Current role: '${req.user.role}'.`,
+        error: `Access denied. Endpoint requires one of [${roles.join(', ')}] role credentials. Current role: '${req.user.role}'.`,
         code: 'FORBIDDEN_ROLE_INSUFFICIENT',
       });
     }

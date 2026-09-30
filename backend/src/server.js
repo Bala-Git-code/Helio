@@ -15,25 +15,21 @@ import clinicalRoutes from './routes/clinical.routes.js';
 
 /**
  * ============================================================================
- * HELIO Medication Intelligence Platform
- * Core Express 5 Server Bootstrap
+ * HELIO Enterprise Medication Intelligence Platform
+ * Core Express 5 Server Bootstrap (src/server.js)
  * ============================================================================
  * 
- * Architectural Overview:
- * This server orchestrates clinical workflow APIs, patient adherence tracking,
- * drug-drug interaction validation engines, and Gemini AI-assisted health consultations.
- * 
- * Compliance & Enterprise Design Principles:
- * - Express 5 Native Promise Handling: Asynchronous route handlers natively catch rejections.
+ * Architectural & Security Principles:
+ * - Zero-JWT & Zero-Password: All authentication is strictly Google OAuth 2.0 backed by Redis.
+ * - Stateful Sessions: connect-redis + express-session with rolling, secure, httpOnly cookies.
+ * - CSRF Defense: Header-based Origin/Referer verification on state-mutating requests.
  * - Defense-in-depth: Helmet headers, strict CORS, rate-limiting, and sanitized payloads.
- * - Operational Telemetry: Detailed health check probe (`/health`), memory, and DB connection status.
- * - Graceful Degradation & Teardown: Handles zero-downtime restarts and socket draining.
+ * - Cryptographic Pairing Protocol: High-entropy Base-32 HL-XXXX-XXXX pairing engine.
  */
 
 // Load environment variables before initializing dependent modules
 dotenv.config();
 
-// Instantiate foundational Express 5 Application
 const app = express();
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -47,7 +43,7 @@ connectDB();
 // 2. Enterprise Security & Core Middlewares
 // ---------------------------------------------------------------------------
 
-// Apply Helmet to protect against common web vulnerabilities (XSS, Clickjacking, MIME-sniffing)
+// Apply Helmet with production-grade security headers
 app.use(
   helmet({
     contentSecurityPolicy: NODE_ENV === 'production' ? undefined : false,
@@ -55,16 +51,18 @@ app.use(
   })
 );
 
-// CORS Policy Configuration: Restrict API access to authorized frontend origins (e.g., Vite dev / production domain)
+// CORS Policy Configuration: Restrict API access to authorized frontend origins
 const allowedOrigins = [
   process.env.CORS_ORIGIN || 'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://localhost:5000',
+  'http://127.0.0.1:5000',
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, or Postman) in development
+      // Allow requests with no origin (mobile clients, curl, Postman) in development
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -85,7 +83,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ---------------------------------------------------------------------------
-// Stateful Session Engine & Security Layer (Zero-JWT / Zero-Password)
+// 3. Stateful Redis Session Engine & Security Layer (Zero-JWT / Zero-Password)
 // ---------------------------------------------------------------------------
 app.use(sessionMiddleware);
 app.use(passport.initialize());
@@ -96,16 +94,15 @@ app.use(validateOriginCsrf);
 if (NODE_ENV === 'development') {
   app.use(morgan('dev'));
 } else {
-  // Apache combined format for production log aggregators (e.g., Datadog, CloudWatch)
   app.use(morgan('combined'));
 }
 
-// Global API Rate Limiter: Protect endpoints against brute force and automated scraping
+// Global API Rate Limiter
 const apiRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes window
   max: 300, // Limit each IP to 300 requests per window
-  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
-  legacyHeaders: false, // Disable `X-RateLimit-*` headers
+  standardHeaders: true,
+  legacyHeaders: false,
   message: {
     success: false,
     error: 'Too many requests from this client. Please retry after 15 minutes.',
@@ -116,13 +113,8 @@ const apiRateLimiter = rateLimit({
 app.use('/api/', apiRateLimiter);
 
 // ---------------------------------------------------------------------------
-// 3. Operational & Health Telemetry Endpoints
+// 4. Operational & Health Telemetry Endpoints
 // ---------------------------------------------------------------------------
-
-/**
- * Liveness & Readiness Probe
- * Utilized by container orchestrators (Kubernetes/ECS) and uptime monitoring
- */
 app.get(['/health', '/api/v1/health'], (req, res) => {
   const dbStatus = getDBStatus();
   const uptimeSeconds = Math.floor(process.uptime());
@@ -147,20 +139,20 @@ app.get(['/health', '/api/v1/health'], (req, res) => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// 4. API Route Mount Points (Modular Architecture)
-// ---------------------------------------------------------------------------
-
-// Root Welcome Route
+// Root Gateway Welcome
 app.get('/', (req, res) => {
   res.status(200).json({
     name: 'HELIO API Gateway',
     version: '1.0.0',
     description: 'Enterprise Medication Intelligence & Patient Adherence Platform',
     status: 'Active',
-    docs: '/api/v1/health',
+    docs: '/health',
   });
 });
+
+// ---------------------------------------------------------------------------
+// 5. API Route Mount Points
+// ---------------------------------------------------------------------------
 
 // Authentication & Session Routes (Pure Google OAuth 2.0)
 app.use('/api/auth', authRoutes);
@@ -169,7 +161,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api', clinicalRoutes);
 
 // ---------------------------------------------------------------------------
-// 5. 404 Route Catch-all
+// 6. 404 Route Catch-all
 // ---------------------------------------------------------------------------
 app.use((req, res, next) => {
   res.status(404).json({
@@ -180,7 +172,7 @@ app.use((req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
-// 6. Centralized Error Handling Middleware (Express 5 Signature)
+// 7. Centralized Error Handling Middleware
 // ---------------------------------------------------------------------------
 app.use((err, req, res, next) => {
   console.error('[HELIO UNHANDLED ERROR]:', err);
@@ -196,9 +188,9 @@ app.use((err, req, res, next) => {
     });
   }
 
-  // Mongoose Duplicate Key Error (E11000)
+  // Mongoose Duplicate Key Error
   if (err.code === 11000) {
-    const field = Object.keys(err.keyValue)[0];
+    const field = Object.keys(err.keyValue || {})[0] || 'uniqueField';
     return res.status(409).json({
       success: false,
       error: `Duplicate value entered for ${field}`,
@@ -206,25 +198,19 @@ app.use((err, req, res, next) => {
     });
   }
 
-  // JWT Authentication Errors
-  if (err.name === 'JsonWebTokenError') {
-    return res.status(401).json({
+  // Rate Limiting or Custom Clinical Pairing Errors
+  if (err.statusCode) {
+    return res.status(err.statusCode).json({
       success: false,
-      error: 'Invalid authentication token',
-      code: 'AUTH_INVALID_TOKEN',
-    });
-  }
-
-  if (err.name === 'TokenExpiredError') {
-    return res.status(401).json({
-      success: false,
-      error: 'Authentication token has expired',
-      code: 'AUTH_TOKEN_EXPIRED',
+      error: err.message,
+      code: err.code || 'CLINICAL_ERROR',
+      remainingAttempts: err.remainingAttempts,
+      remainingLockoutSeconds: err.remainingLockoutSeconds,
     });
   }
 
   // Default Internal Server Error
-  const statusCode = err.statusCode || 500;
+  const statusCode = err.status || 500;
   return res.status(statusCode).json({
     success: false,
     error: err.message || 'Internal Server Error',
@@ -234,7 +220,7 @@ app.use((err, req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. Server Initialization & Graceful Shutdown
+// 8. Server Initialization & Graceful Shutdown
 // ---------------------------------------------------------------------------
 const server = app.listen(PORT, () => {
   console.log(`
@@ -244,27 +230,22 @@ const server = app.listen(PORT, () => {
   🚀 Server Running On Port  : ${PORT}
   📡 Environment Mode        : ${NODE_ENV}
   🩺 Health Endpoint Check   : http://localhost:${PORT}/health
-  🛡️  Security Policy         : Active (Helmet + CORS + RateLimit)
+  🛡️  Security Policy         : Active (CSRF + Redis Sessions + RBAC)
   =============================================================
   `);
 });
 
-// Graceful Shutdown Signals (Kubernetes / Docker / Process Manager)
+// Graceful Teardown Signals
 const handleGracefulShutdown = async (signal) => {
   console.log(`\n[HELIO SHUTDOWN] Received ${signal}. Initiating graceful teardown...`);
 
-  // Stop accepting new connections
   server.close(async () => {
-    console.log('[HELIO SHUTDOWN] HTTP server closed. Draining existing connections.');
-
-    // Close Database Pool cleanly
+    console.log('[HELIO SHUTDOWN] HTTP server closed. Draining open connections.');
     await closeDB();
-
     console.log('[HELIO SHUTDOWN] All subsystems cleanly halted. Exiting process.');
     process.exit(0);
   });
 
-  // Force shutdown if connections do not close within 10 seconds
   setTimeout(() => {
     console.error('[HELIO SHUTDOWN FATAL] Forcing shutdown after timeout.');
     process.exit(1);
